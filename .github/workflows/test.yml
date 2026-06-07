@@ -1,0 +1,54 @@
+name: test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm run test:coverage
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+  e2e-web:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+      - run: npm run test:e2e
+      - run: npm run test:fc
+
+  e2e-desktop:
+    needs: unit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Install com0com
+        shell: pwsh
+        run: npm run test:ports:install
+      - name: Rust integration (com0com loopback)
+        shell: pwsh
+        run: npm run test:rust
+      - name: Desktop E2E scaffold
+        run: npm run test:e2e:desktop

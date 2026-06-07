@@ -30,3 +30,9 @@ tauri-plugin-fs = "2"
 
 [dev-dependencies]
 serialport = "4"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

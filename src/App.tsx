@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { EditorView, keymap } from "@codemirror/view"
 import CodeMirror from "@uiw/react-codemirror"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -839,7 +839,7 @@ function LogStream({ session }: { session: SessionProfile }) {
     count: logs.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 34,
-    overscan: 16,
+    overscan: 8,
   })
 
   useEffect(() => {
@@ -1219,7 +1219,7 @@ function HighlightRulesDialog() {
   )
 }
 
-function LogLine({
+const LogLine = memo(function LogLine({
   entry,
   displayMode,
   highlightRules,
@@ -1291,7 +1291,7 @@ function LogLine({
       </Button>
     </div>
   )
-}
+});
 
 function CommandComposer({ session }: { session: SessionProfile }) {
   const t = useT()
@@ -1380,6 +1380,9 @@ function CommandComposer({ session }: { session: SessionProfile }) {
 
   const sendCommand = () => void executeSend({ clearAfter: true })
 
+  const executeSendRef = useRef(executeSend)
+  executeSendRef.current = executeSend
+
   const editorExtensions = useMemo(
     () => [
       EditorView.lineWrapping,
@@ -1390,13 +1393,13 @@ function CommandComposer({ session }: { session: SessionProfile }) {
         {
           key: "Mod-Enter",
           run: () => {
-            void executeSend({ clearAfter: true })
+            void executeSendRef.current({ clearAfter: true })
             return true
           },
         },
       ]),
     ],
-    [executeSend]
+    []
   )
 
   return (

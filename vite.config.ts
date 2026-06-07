@@ -13,6 +13,18 @@ export default defineConfig({
     "import.meta.env.PRETTYCOM_E2E_MOCK": JSON.stringify(e2eMock ? "1" : ""),
   },
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) return "react"
+          if (id.includes("node_modules/@uiw/react-codemirror") || id.includes("node_modules/@codemirror")) return "codemirror"
+          if (id.includes("node_modules/@tanstack")) return "table"
+          if (id.includes("node_modules/@radix-ui")) return "ui"
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

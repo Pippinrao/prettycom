@@ -34,6 +34,7 @@ jobs:
   e2e-desktop:
     needs: unit
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,10 +44,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - name: Install com0com
+        id: com0com
         shell: pwsh
+        timeout-minutes: 12
+        continue-on-error: true
+        env:
+          PRETTYCOM_COM0COM_DOWNLOAD_TIMEOUT_SEC: 180
+          PRETTYCOM_COM0COM_INSTALL_TIMEOUT_SEC: 480
         run: npm run test:ports:install
-      - name: Rust integration (com0com loopback)
+      - name: Rust tests
         shell: pwsh
-        run: npm run test:rust
+        run: |
+          if ("${{ steps.com0com.outcome }}" -eq "success") {
+            npm run test:rust
+          } else {
+            Write-Host "::warning::com0com unavailable on runner; running Rust library tests only."
+            cargo test --manifest-path src-tauri/Cargo.toml --lib
+          }
       - name: Desktop E2E scaffold
         run: npm run test:e2e:desktop

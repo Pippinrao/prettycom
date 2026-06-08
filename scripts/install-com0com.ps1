@@ -15,7 +15,9 @@ function Get-SetupcPath {
 }
 
 $SetupcPath = Get-SetupcPath
-$ZipUrl = "https://sourceforge.net/projects/com0com/files/com0com/3.0.0.0/com0com-3.0.0.0-i386-and-x64-signed.zip/download"
+$ZipUrl = "https://downloads.sourceforge.net/project/com0com/com0com/3.0.0.0/com0com-3.0.0.0-i386-and-x64-signed.zip"
+$DownloadTimeoutSec = if ($env:PRETTYCOM_COM0COM_DOWNLOAD_TIMEOUT_SEC) { [int]$env:PRETTYCOM_COM0COM_DOWNLOAD_TIMEOUT_SEC } else { 300 }
+$InstallTimeoutSec = if ($env:PRETTYCOM_COM0COM_INSTALL_TIMEOUT_SEC) { [int]$env:PRETTYCOM_COM0COM_INSTALL_TIMEOUT_SEC } else { 600 }
 $ZipPath = Join-Path $env:TEMP "com0com-3.0.0.0-signed.zip"
 $ExtractDir = Join-Path $env:TEMP "com0com-signed-extract"
 $PortA = if ($env:PRETTYCOM_TEST_PORT_A) { $env:PRETTYCOM_TEST_PORT_A } else { "COM10" }
@@ -24,12 +26,12 @@ $PortB = if ($env:PRETTYCOM_TEST_PORT_B) { $env:PRETTYCOM_TEST_PORT_B } else { "
 function Download-Com0comArchive {
     Write-Host "Downloading signed com0com from SourceForge..."
     if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        & curl.exe -L -o $ZipPath $ZipUrl
+        & curl.exe -L --fail --retry 3 --retry-delay 5 --connect-timeout 30 --max-time $DownloadTimeoutSec -o $ZipPath $ZipUrl
         if ($LASTEXITCODE -ne 0) {
             throw "curl download failed (exit $LASTEXITCODE)"
         }
     } else {
-        Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipPath -UseBasicParsing
+        Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipPath -UseBasicParsing -TimeoutSec $DownloadTimeoutSec
     }
     $magic = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($ZipPath)[0..1])
     if ($magic -ne "PK") {
@@ -58,7 +60,11 @@ function Install-Com0com {
     $setupPath = Get-SignedSetupPath
     Write-Host "Running silent install: $setupPath"
     $env:CNC_INSTALL_COMX_COMX_PORTS = "YES"
-    $process = Start-Process -FilePath $setupPath -ArgumentList "/S" -Wait -PassThru
+    $process = Start-Process -FilePath $setupPath -ArgumentList "/S" -PassThru
+    if (-not $process.WaitForExit($InstallTimeoutSec * 1000)) {
+        try { $process.Kill() } catch { }
+        throw "com0com setup timed out after ${InstallTimeoutSec}s. Driver install may require reboot or be blocked by policy."
+    }
     if ($process.ExitCode -ne 0) {
         throw "com0com setup exited with code $($process.ExitCode). Check driver signing policy."
     }

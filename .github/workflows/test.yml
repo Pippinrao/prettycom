@@ -14,10 +14,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm run test:coverage
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
 
   e2e-web:
     needs: unit

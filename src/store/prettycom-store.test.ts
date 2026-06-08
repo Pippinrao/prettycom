@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
-import { createSessionProfile, mergePersistedPrettyComState, usePrettyComStore } from "@/store/prettycom-store"
+import {
+  createSessionProfile,
+  DEV_TEST_SESSION_ID,
+  mergePersistedPrettyComState,
+  sanitizeProductionSessions,
+  usePrettyComStore,
+} from "@/store/prettycom-store"
 import { createRxLogEntry, createTxLogEntry } from "@/data/serial-defaults"
 import {
   DEFAULT_MAX_LOG_ENTRIES_PER_SESSION,
@@ -69,10 +75,10 @@ describe("prettycom-store", () => {
     expect(atCount).toBe(1)
   })
 
-  it("removeSession falls back to default when last removed", () => {
+  it("removeSession clears state when last session removed", () => {
     usePrettyComStore.getState().removeSession("s1")
-    expect(usePrettyComStore.getState().sessions).toHaveLength(1)
-    expect(usePrettyComStore.getState().currentSessionId).toBeTruthy()
+    expect(usePrettyComStore.getState().sessions).toHaveLength(0)
+    expect(usePrettyComStore.getState().currentSessionId).toBe("")
   })
 
   it("aliases CRUD", () => {
@@ -121,6 +127,14 @@ describe("prettycom-store", () => {
     expect(usePrettyComStore.getState().theme).toBe("light")
     expect(usePrettyComStore.getState().suffix).toBe("lf")
     expect(document.documentElement.classList.contains("dark")).toBe(false)
+  })
+
+  it("sanitizeProductionSessions keeps placeholder in dev/e2e runtime", () => {
+    const sessions = [
+      createSessionProfile("COM3", "Real"),
+      { ...createSessionProfile("COM10", "Test Port"), id: DEV_TEST_SESSION_ID },
+    ]
+    expect(sanitizeProductionSessions(sessions)).toHaveLength(2)
   })
 
   it("mergePersistedPrettyComState restores theme and suffix", () => {

@@ -24,7 +24,10 @@ import type {
   SessionStatus,
   Theme,
 } from "@/types/serial"
+import { isDevOrE2eRuntime } from "@/lib/runtime-env"
 import { applyTheme, normalizeTheme } from "@/lib/theme"
+
+export const DEV_TEST_SESSION_ID = "test-default"
 
 export type { DisplayMode, Language, LineSuffix, Theme }
 
@@ -39,16 +42,42 @@ export interface SessionProfile {
   lastRxAt?: number
 }
 
-function createDefaultSession(): SessionProfile {
+function createSessionRestoreTemplate(): SessionProfile {
   return {
-    id: "test-default",
-    name: "Test Port",
-    path: DEFAULT_TEST_PORT_A,
+    id: "",
+    name: "",
+    path: "",
     config: { ...DEFAULT_SERIAL_CONFIG },
     status: "disconnected",
     logs: [],
     unread: 0,
   }
+}
+
+function createDevTestSession(): SessionProfile {
+  return {
+    ...createSessionRestoreTemplate(),
+    id: DEV_TEST_SESSION_ID,
+    name: "Test Port",
+    path: DEFAULT_TEST_PORT_A,
+  }
+}
+
+/** Default display name for a new session: the port identifier itself. */
+export function defaultSessionNameFromPath(path: string): string {
+  return path.trim()
+}
+
+/** Remove built-in dev/E2E placeholder sessions from production runtime. */
+export function sanitizeProductionSessions(sessions: SessionProfile[]): SessionProfile[] {
+  if (isDevOrE2eRuntime()) {
+    return sessions
+  }
+  return sessions.filter((session) => session.id !== DEV_TEST_SESSION_ID)
+}
+
+function createInitialSessions(): SessionProfile[] {
+  return isDevOrE2eRuntime() ? [createDevTestSession()] : []
 }
 
 export function mergePersistedPrettyComState(
@@ -93,8 +122,8 @@ export function mergePersistedPrettyComState(
     }
   }
 
-  const sessions = saved.sessions.map((session) => ({
-    ...createDefaultSession(),
+  let sessions: SessionProfile[] = saved.sessions.map((session) => ({
+    ...createSessionRestoreTemplate(),
     ...session,
     status: "disconnected" as SessionStatus,
     logs: trimLogsToLimit(session.logs ?? [], maxLogEntriesPerSession),
@@ -102,9 +131,20 @@ export function mergePersistedPrettyComState(
     lastRxAt: undefined,
     config: { ...DEFAULT_SERIAL_CONFIG, ...session.config },
   }))
+  sessions = sanitizeProductionSessions(sessions)
+  if (!isDevOrE2eRuntime()) {
+    sessions = sessions.map((session) =>
+      session.name.trim().toUpperCase() === "STM32" && session.path.trim()
+        ? { ...session, name: defaultSessionNameFromPath(session.path) }
+        : session
+    )
+  }
 
-  const currentSessionId = saved.currentSessionId ?? sessions[0]?.id ?? current.currentSessionId
-  const activeSession = sessions.find((session) => session.id === currentSessionId) ?? sessions[0]
+  const currentSessionId =
+    sessions.find((session) => session.id === saved.currentSessionId)?.id ??
+    sessions[0]?.id ??
+    ""
+  const activeSession = sessions.find((session) => session.id === currentSessionId)
 
   const sendLists = (saved.sendLists ?? current.sendLists).map((list: SendList) => {
     const migrated = { ...list } as SendList & { loopCount?: number; intervalMs?: number }
@@ -205,9 +245,9 @@ interface PrettyComState {
 export const usePrettyComStore = create<PrettyComState>()(
   persist(
     (set, get) => {
-      const defaultSession = createDefaultSession()
+      const initialSessions = createInitialSessions()
       return {
-      currentSessionId: defaultSession.id,
+      currentSessionId: initialSessions[0]?.id ?? "",
       selectedLogId: "",
       commandText: "",
       commandHistory: [],
@@ -226,7 +266,7 @@ export const usePrettyComStore = create<PrettyComState>()(
       maxLogEntriesPerSession: DEFAULT_MAX_LOG_ENTRIES_PER_SESSION,
       sendLists: [],
       sendListRunningId: null,
-      sessions: [defaultSession],
+      sessions: initialSessions,
       setCurrentSession: (currentSessionId) =>
         set((state) => {
           const sessions = state.sessions.map((session) =>
@@ -325,10 +365,9 @@ export const usePrettyComStore = create<PrettyComState>()(
         set((state) => {
           const sessions = state.sessions.filter((session) => session.id !== sessionId)
           if (!sessions.length) {
-            const fallback = createDefaultSession()
             return {
-              sessions: [fallback],
-              currentSessionId: fallback.id,
+              sessions: [],
+              currentSessionId: "",
               selectedLogId: "",
             }
           }

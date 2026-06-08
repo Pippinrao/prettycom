@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="PrettyCOM">
+  <rect width="512" height="512" rx="96" fill="#00C5C8"/>
+  <g fill="none" stroke="#111111" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M148 214V118M208 214V118M148 214H208"/>
+    <path d="M178 214C178 246 160 268 146 296C132 324 142 356 172 376C202 396 244 406 284 424C324 442 352 458 378 474"/>
+    <path d="M378 474H430M378 474V414M408 474V414"/>
+  </g>
+</svg>

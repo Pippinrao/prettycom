@@ -46,6 +46,14 @@ test("send disabled when disconnected", async ({ page }) => {
   await expect(page.getByTestId("send-command")).toBeDisabled()
 })
 
+/** @fc F01 */
+test("remove last session from sidebar and context menu", async ({ page }) => {
+  await page.getByTestId("sidebar-remove-session").click()
+  await page.getByRole("button", { name: /移除|Remove/i }).last().click()
+  await expect(page.getByTestId("session-item-test-default")).toHaveCount(0)
+  await expect(page.getByText(/打开串口开始|Open a port to start/i)).toBeVisible()
+})
+
 /** @fc F08 */
 test("log search filter", async ({ page }) => {
   await page.getByTestId("session-connect-toggle").click()
@@ -55,6 +63,9 @@ test("log search filter", async ({ page }) => {
   await page.getByTestId("send-command").click()
   await page.getByTestId("log-search").fill("HELLO")
   await expect(page.getByTestId("log-filter-count")).toBeVisible()
+  await page.getByTestId("log-search").fill("NOMATCH_FILTER_XYZ")
+  await expect(page.getByTestId("log-search")).toBeVisible()
+  await expect(page.getByTestId("log-filter-empty")).toBeVisible()
 })
 
 /** @fc F10 */

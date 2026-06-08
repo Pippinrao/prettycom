@@ -24,6 +24,10 @@ runtime-logs
 .playwright-shots
 PERFORMANCE-REPORT.md
 
+# Discarded icon experiments and generated raster intermediates
+assets/icon-candidates/
+assets/brand/app-icon-1024.png
+
 # Rust build artifacts
 src-tauri/target
 

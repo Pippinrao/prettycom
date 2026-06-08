@@ -8,7 +8,6 @@ import {
   Activity,
   Bolt,
   Braces,
-  Cable,
   CircleAlert,
   CircleOff,
   Command as CommandIcon,
@@ -74,6 +73,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -144,6 +149,7 @@ import {
   serializeSendList,
 } from "@/data/serial-defaults"
 import { DEFAULT_TEST_PORT_A } from "@/data/test-ports"
+import { isDevOrE2eRuntime } from "@/lib/runtime-env"
 import { useT } from "@/hooks/use-t"
 import {
   closePort,
@@ -165,6 +171,7 @@ import {
 import { cn } from "@/lib/utils"
 import {
   createSessionProfile,
+  defaultSessionNameFromPath,
   usePrettyComStore,
   type Language,
   type SessionProfile,
@@ -236,12 +243,120 @@ function App() {
   )
 }
 
+function SessionRemoveDialog({
+  session,
+  open,
+  onOpenChange,
+}: {
+  session: SessionProfile
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const t = useT()
+  const removeSession = usePrettyComStore((state) => state.removeSession)
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("Delete session?")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("This closes the port and removes the session from the sidebar.")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              void closePort(session.id)
+              removeSession(session.id)
+            }}
+          >
+            {t("Remove")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+function SessionSidebarMenuItem({
+  session,
+  isActive,
+  onSelect,
+}: {
+  session: SessionProfile
+  isActive: boolean
+  onSelect: () => void
+}) {
+  const t = useT()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  return (
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={isActive}
+              tooltip={`${session.name} · ${session.path}`}
+              onClick={onSelect}
+              data-testid={`session-item-${session.id}`}
+            >
+              <StatusDot status={session.status} />
+              <span>{session.name}</span>
+            </SidebarMenuButton>
+            <SidebarMenuBadge className="gap-1">
+              {session.unread > 0 && (
+                <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                  {session.unread}
+                </Badge>
+              )}
+              {session.path}
+            </SidebarMenuBadge>
+          </SidebarMenuItem>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            variant="destructive"
+            data-testid={`session-delete-${session.id}`}
+            onSelect={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            {t("Remove session")}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <SessionRemoveDialog session={session} open={deleteOpen} onOpenChange={setDeleteOpen} />
+    </>
+  )
+}
+
+function SidebarRemoveSessionButton({ session }: { session: SessionProfile }) {
+  const t = useT()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        className="mx-2 mb-1 justify-start gap-2 group-data-[collapsible=icon]:hidden"
+        onClick={() => setDeleteOpen(true)}
+        data-testid="sidebar-remove-session"
+      >
+        <Trash2 className="size-4" />
+        {t("Remove session")}
+      </Button>
+      <SessionRemoveDialog session={session} open={deleteOpen} onOpenChange={setDeleteOpen} />
+    </>
+  )
+}
+
 function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
   const t = useT()
   const sessions = usePrettyComStore((state) => state.sessions)
   const currentSessionId = usePrettyComStore((state) => state.currentSessionId)
   const setCurrentSession = usePrettyComStore((state) => state.setCurrentSession)
-  const removeSession = usePrettyComStore((state) => state.removeSession)
   const setSettingsOpen = usePrettyComStore((state) => state.setSettingsOpen)
   const currentSession = sessions.find((session) => session.id === currentSessionId)
 
@@ -267,9 +382,13 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
     <Sidebar variant="sidebar" collapsible="icon" className="border-r border-border/70">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Cable className="size-4" />
-          </div>
+          <img
+            src="/app-icon.png"
+            alt=""
+            className="size-8 shrink-0 rounded-lg"
+            width={32}
+            height={32}
+          />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
             <div className="truncate text-sm font-semibold tracking-tight">PrettyCOM</div>
             <div className="truncate text-xs text-muted-foreground">{t("Serial workbench")}</div>
@@ -282,25 +401,12 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
           <SidebarGroupContent>
             <SidebarMenu>
               {sessions.map((session) => (
-                <SidebarMenuItem key={session.id}>
-                  <SidebarMenuButton
-                    isActive={session.id === currentSessionId}
-                    tooltip={`${session.name} · ${session.path}`}
-                    onClick={() => setCurrentSession(session.id)}
-                    data-testid={`session-item-${session.id}`}
-                  >
-                    <StatusDot status={session.status} />
-                    <span>{session.name}</span>
-                  </SidebarMenuButton>
-                  <SidebarMenuBadge className="gap-1">
-                    {session.unread > 0 && (
-                      <Badge variant="secondary" className="h-4 px-1 text-[10px]">
-                        {session.unread}
-                      </Badge>
-                    )}
-                    {session.path}
-                  </SidebarMenuBadge>
-                </SidebarMenuItem>
+                <SessionSidebarMenuItem
+                  key={session.id}
+                  session={session}
+                  isActive={session.id === currentSessionId}
+                  onSelect={() => setCurrentSession(session.id)}
+                />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -334,35 +440,7 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
             <AlertDescription>{currentSession.path}</AlertDescription>
           </Alert>
         ) : null}
-        {sessions.length > 1 && currentSession ? (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" className="mx-2 mb-1 justify-start gap-2 group-data-[collapsible=icon]:hidden">
-                <Trash2 className="size-4" />
-                {t("Remove session")}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>{t("Delete session?")}</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t("This closes the port and removes the session from the sidebar.")}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
-                    void closePort(currentSession.id)
-                    removeSession(currentSession.id)
-                  }}
-                >
-                  {t("Remove")}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        ) : null}
+        {currentSession ? <SidebarRemoveSessionButton session={currentSession} /> : null}
         <Button
           variant="ghost"
           className="mx-2 justify-start gap-2 group-data-[collapsible=icon]:justify-center"
@@ -379,6 +457,7 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
 }
 
 function Workbench({ onOpenPort }: { onOpenPort: () => void }) {
+  const t = useT()
   const sessions = usePrettyComStore((state) => state.sessions)
   const currentSessionId = usePrettyComStore((state) => state.currentSessionId)
   const settingsOpen = usePrettyComStore((state) => state.settingsOpen)
@@ -386,7 +465,37 @@ function Workbench({ onOpenPort }: { onOpenPort: () => void }) {
   const currentSession = sessions.find((session) => session.id === currentSessionId) ?? sessions[0]
 
   if (!currentSession) {
-    return null
+    return (
+      <main className="flex h-screen min-w-0 flex-col">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/70 px-4">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger label={t("Toggle Sidebar")} />
+            <Separator orientation="vertical" className="h-5" />
+            <span className="text-sm text-muted-foreground">{t("No session yet")}</span>
+          </div>
+          <Button size="sm" className="h-9 gap-2 font-semibold" onClick={onOpenPort} data-testid="open-port-btn">
+            <PlugZap className="size-4" />
+            {t("Open Port")}
+          </Button>
+        </header>
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          <div className="max-w-sm text-center">
+            <div className="mx-auto flex size-10 items-center justify-center rounded-lg border border-border bg-card">
+              <PlugZap className="size-5 text-muted-foreground" />
+            </div>
+            <h3 className="mt-4 text-sm font-medium">{t("Open a port to start")}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("Create a serial session from the sidebar or the button above.")}
+            </p>
+            <Button className="mt-4 gap-2" onClick={onOpenPort}>
+              <PlugZap className="size-4" />
+              {t("Open Port")}
+            </Button>
+          </div>
+        </div>
+        <SettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} />
+      </main>
+    )
   }
 
   return (
@@ -512,29 +621,52 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const [ports, setPorts] = useState<PortInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [name, setName] = useState("STM32")
-  const [path, setPath] = useState(DEFAULT_TEST_PORT_A)
+  const [name, setName] = useState("")
+  const [nameCustomized, setNameCustomized] = useState(false)
+  const [path, setPath] = useState(isDevOrE2eRuntime() ? DEFAULT_TEST_PORT_A : "")
   const [config, setConfig] = useState<SerialConfig>({ ...DEFAULT_SERIAL_CONFIG })
 
-  const refreshPorts = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await listPorts()
-      setPorts(result)
-      if (result.length && !result.some((port) => port.name === path)) {
-        setPath(result[0].name)
+  const applySelectedPort = useCallback(
+    (nextPath: string) => {
+      setPath(nextPath)
+      if (!nameCustomized) {
+        setName(defaultSessionNameFromPath(nextPath))
       }
-    } catch {
-      setPorts([])
-    } finally {
-      setLoading(false)
-    }
-  }, [path])
+    },
+    [nameCustomized]
+  )
+
+  const refreshPorts = useCallback(
+    async (preferredPath?: string) => {
+      setLoading(true)
+      try {
+        const result = await listPorts()
+        setPorts(result)
+        if (!result.length) {
+          return
+        }
+        const currentPath = preferredPath ?? path
+        if (!currentPath || !result.some((port) => port.name === currentPath)) {
+          applySelectedPort(result[0].name)
+        }
+      } catch {
+        setPorts([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [applySelectedPort, path]
+  )
 
   useEffect(() => {
-    if (open) {
-      void refreshPorts()
+    if (!open) {
+      return
     }
+    setNameCustomized(false)
+    const initialPath = isDevOrE2eRuntime() ? DEFAULT_TEST_PORT_A : ""
+    setPath(initialPath)
+    setName(initialPath ? defaultSessionNameFromPath(initialPath) : "")
+    void refreshPorts(initialPath)
   }, [open, refreshPorts])
 
   const handleConnect = async () => {
@@ -542,7 +674,7 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       return
     }
     setBusy(true)
-    const session = createSessionProfile(path, name.trim() || path, config)
+    const session = createSessionProfile(path, name.trim() || defaultSessionNameFromPath(path), config)
     addSession(session)
     try {
       await openPort(session.id, session.path, session.config)
@@ -570,12 +702,20 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
         <div className="grid max-h-[calc(90vh-10rem)] gap-3 overflow-y-auto py-2 pr-1">
           <div className="grid gap-1.5">
             <label className="text-sm font-medium">{t("Session name")}</label>
-            <Input className="w-full min-w-0" value={name} onChange={(event) => setName(event.target.value)} />
+            <Input
+              className="w-full min-w-0"
+              value={name}
+              placeholder={path ? defaultSessionNameFromPath(path) : t("Session name")}
+              onChange={(event) => {
+                setNameCustomized(true)
+                setName(event.target.value)
+              }}
+            />
           </div>
           <div className="grid min-w-0 gap-1.5">
             <div className="flex items-center justify-between gap-2">
               <label className="text-sm font-medium">{t("Select port")}</label>
-              <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1" onClick={() => void refreshPorts()}>
+              <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1" onClick={() => void refreshPorts(path)}>
                 <RefreshCcw className="size-3.5" />
                 {t("Refresh ports")}
               </Button>
@@ -583,7 +723,7 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             {loading ? (
               <Skeleton className="h-9 rounded-md" />
             ) : ports.length ? (
-              <Select value={path} onValueChange={setPath}>
+              <Select value={path} onValueChange={applySelectedPort}>
                 <SelectTrigger className="w-full min-w-0 max-w-full truncate" data-testid="port-select">
                   <SelectValue placeholder={t("Select port")}>
                     {path ? (
@@ -863,9 +1003,11 @@ function LogStream({ session }: { session: SessionProfile }) {
     setPendingScrollLogId(null)
   }, [pendingScrollLogId, logs, rowVirtualizer, setPendingScrollLogId, setSelectedLog])
 
+  const totalCount = session.logs.length
+
   return (
-    <div className="min-h-0 flex-1 bg-background">
-      {!logs.length ? (
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      {!totalCount ? (
         <div className="flex h-full items-center justify-center p-8">
           <div className="max-w-sm text-center">
             <div className="mx-auto flex size-10 items-center justify-center rounded-lg border border-border bg-card">
@@ -873,39 +1015,50 @@ function LogStream({ session }: { session: SessionProfile }) {
             </div>
             <h3 className="mt-4 text-sm font-medium">{t("No serial history")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t("Open a port or send a command to start collecting RX/TX records. Development sample data is available only while running the dev server.")}
+              {import.meta.env.DEV
+                ? t("Open a port or send a command to start collecting RX/TX records. Development sample data is available only while running the dev server.")
+                : t("Open a port or send a command to start collecting RX/TX records.")}
             </p>
           </div>
         </div>
       ) : (
-        <div className="flex h-full min-h-0 flex-col">
-          <LogTableHeader visibleCount={logs.length} totalCount={session.logs.length} />
-          <div
-            ref={parentRef}
-            className="min-h-0 flex-1 overflow-auto font-mono text-[12px] leading-none"
-            aria-label={t("Realtime serial log")}
-            data-testid="log-stream"
-          >
-            <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() + 40 }}>
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const entry = logs[virtualRow.index]
-                return (
-                  <LogLine
-                    key={entry.id}
-                    entry={entry}
-                    displayMode={displayMode}
-                    highlightRules={highlightRules}
-                    zebra={virtualRow.index % 2 === 0}
-                    selected={entry.id === selectedLogId}
-                    onSelect={() => setSelectedLog(entry.id)}
-                    onDelete={() => deleteLogEntry(session.id, entry.id)}
-                    top={virtualRow.start}
-                  />
-                )
-              })}
+        <>
+          <LogTableHeader visibleCount={logs.length} totalCount={totalCount} />
+          {logs.length ? (
+            <div
+              ref={parentRef}
+              className="min-h-0 flex-1 overflow-auto font-mono text-[12px] leading-none"
+              aria-label={t("Realtime serial log")}
+              data-testid="log-stream"
+            >
+              <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() + 40 }}>
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const entry = logs[virtualRow.index]
+                  return (
+                    <LogLine
+                      key={entry.id}
+                      entry={entry}
+                      displayMode={displayMode}
+                      highlightRules={highlightRules}
+                      zebra={virtualRow.index % 2 === 0}
+                      selected={entry.id === selectedLogId}
+                      onSelect={() => setSelectedLog(entry.id)}
+                      onDelete={() => deleteLogEntry(session.id, entry.id)}
+                      top={virtualRow.start}
+                    />
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        </div>
+          ) : (
+            <div
+              className="flex min-h-0 flex-1 items-center justify-center p-8 text-sm text-muted-foreground"
+              data-testid="log-filter-empty"
+            >
+              {t("No logs match filter")}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

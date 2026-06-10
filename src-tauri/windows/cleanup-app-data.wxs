@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <CustomAction
+      Id="DeletePrettyComAppData"
+      Directory="SystemFolder"
+      ExeCommand="cmd.exe /c rmdir /s /q &quot;%LOCALAPPDATA%\com.prettycom.app&quot; 2&gt;nul &amp; rmdir /s /q &quot;%APPDATA%\com.prettycom.app&quot; 2&gt;nul &amp; reg delete HKCU\Software\prettycom\PrettyCOM /f 2&gt;nul"
+      Execute="commit"
+      Impersonate="yes"
+      Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="DeletePrettyComAppData" Before="InstallFinalize">
+        REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE
+      </Custom>
+    </InstallExecuteSequence>
+  </Fragment>
+</Wix>

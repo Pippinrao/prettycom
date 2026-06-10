@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "PrettyCOM",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "identifier": "com.prettycom.app",
   "build": {
     "frontendDist": "../dist",
@@ -36,6 +36,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["windows/cleanup-app-data.wxs"]
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

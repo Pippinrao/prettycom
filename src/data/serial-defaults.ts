@@ -1,14 +1,17 @@
 import { translate } from "@/i18n"
-import type { DisplayMode, FrameField, Language, LineSuffix, LogEntry, SendList, SendListCommand } from "@/types/serial"
+import type { Alias, DisplayMode, FrameField, Language, LineSuffix, LogEntry, SendList, SendListCommand } from "@/types/serial"
 
 export { DEFAULT_SERIAL_CONFIG } from "@/data/serial-config"
 
-export const macros = [
-  { id: "reset", name: "Reset", body: "AT+RST", shortcut: "Alt+R" },
-  { id: "version", name: "Version", body: "AT+GMR", shortcut: "Alt+V" },
-  { id: "ping", name: "Ping", body: "AT+PING?", shortcut: "Alt+P" },
-  { id: "boot", name: "Bootloader", body: "BOOT 0x1000", shortcut: "Alt+B" },
-]
+/** Default quick commands for new installs; users can edit or delete them like any alias. */
+export function createDefaultAliases(): Alias[] {
+  return [
+    { id: "reset", name: "Reset", command: "AT+RST", mode: "ascii", suffix: "crlf" },
+    { id: "version", name: "Version", command: "AT+GMR", mode: "ascii", suffix: "crlf" },
+    { id: "ping", name: "Ping", command: "AT+PING?", mode: "ascii", suffix: "crlf" },
+    { id: "boot", name: "Bootloader", command: "BOOT 0x1000", mode: "ascii", suffix: "crlf" },
+  ]
+}
 
 export function formatLogPayload(entry: LogEntry, mode: DisplayMode) {
   return mode === "hex" ? entry.hex : entry.ascii

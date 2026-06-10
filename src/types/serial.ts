@@ -1,6 +1,8 @@
 export type Language = "zh-CN" | "en-US"
 export type Theme = "dark" | "light"
 export type DisplayMode = "ascii" | "hex"
+/** Terminal: merge RX into lines until LF. Frame: one USB read per log row. */
+export type RxDisplayMode = "terminal" | "frame"
 export type LineSuffix = "none" | "cr" | "lf" | "crlf"
 export type Parity = "none" | "odd" | "even"
 export type FlowControl = "none" | "hardware" | "software"

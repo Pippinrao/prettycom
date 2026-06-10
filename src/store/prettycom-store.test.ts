@@ -1,13 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import * as runtimeEnv from "@/lib/runtime-env"
 
 import {
   createSessionProfile,
   DEV_TEST_SESSION_ID,
   mergePersistedPrettyComState,
+  normalizeRxDisplayMode,
   sanitizeProductionSessions,
   usePrettyComStore,
 } from "@/store/prettycom-store"
-import { createRxLogEntry, createTxLogEntry } from "@/data/serial-defaults"
+import { createRxLogEntry, createTxLogEntry, createDefaultAliases } from "@/data/serial-defaults"
 import {
   DEFAULT_MAX_LOG_ENTRIES_PER_SESSION,
   MAX_SESSIONS,
@@ -81,6 +84,12 @@ describe("prettycom-store", () => {
     expect(usePrettyComStore.getState().currentSessionId).toBe("")
   })
 
+  it("initializes default quick command aliases", () => {
+    usePrettyComStore.setState({ aliases: createDefaultAliases() })
+    expect(usePrettyComStore.getState().aliases).toHaveLength(4)
+    expect(usePrettyComStore.getState().aliases[0].command).toBe("AT+RST")
+  })
+
   it("aliases CRUD", () => {
     usePrettyComStore.getState().addAlias({
       id: "a1",
@@ -137,6 +146,41 @@ describe("prettycom-store", () => {
     expect(sanitizeProductionSessions(sessions)).toHaveLength(2)
   })
 
+  it("sanitizeProductionSessions removes dev placeholder outside dev/e2e runtime", () => {
+    vi.spyOn(runtimeEnv, "isDevOrE2eRuntime").mockReturnValue(false)
+    const sessions = [
+      createSessionProfile("COM3", "Real"),
+      { ...createSessionProfile("COM10", "Test Port"), id: DEV_TEST_SESSION_ID },
+    ]
+    expect(sanitizeProductionSessions(sessions)).toHaveLength(1)
+    expect(sanitizeProductionSessions(sessions)[0].path).toBe("COM3")
+    vi.restoreAllMocks()
+  })
+
+  it("mergePersistedPrettyComState drops dev placeholder session in production runtime", () => {
+    vi.spyOn(runtimeEnv, "isDevOrE2eRuntime").mockReturnValue(false)
+    const restored = mergePersistedPrettyComState(
+      {
+        sessions: [
+          {
+            id: DEV_TEST_SESSION_ID,
+            name: "Test Port",
+            path: "COM10",
+            config: usePrettyComStore.getState().sessions[0].config,
+            status: "disconnected",
+            unread: 0,
+            logs: [],
+          },
+        ],
+        currentSessionId: DEV_TEST_SESSION_ID,
+      },
+      usePrettyComStore.getState()
+    )
+    expect(restored.sessions).toHaveLength(0)
+    expect(restored.currentSessionId).toBe("")
+    vi.restoreAllMocks()
+  })
+
   it("mergePersistedPrettyComState restores theme and suffix", () => {
     const restored = mergePersistedPrettyComState(
       { theme: "light", suffix: "cr" },
@@ -144,6 +188,21 @@ describe("prettycom-store", () => {
     )
     expect(restored.theme).toBe("light")
     expect(restored.suffix).toBe("cr")
+  })
+
+  it("normalizeRxDisplayMode rejects invalid persisted values", () => {
+    expect(normalizeRxDisplayMode("frame")).toBe("frame")
+    expect(normalizeRxDisplayMode("terminal")).toBe("terminal")
+    expect(normalizeRxDisplayMode("bogus")).toBe("terminal")
+    expect(normalizeRxDisplayMode(undefined)).toBe("terminal")
+  })
+
+  it("mergePersistedPrettyComState coerces invalid rxDisplayMode", () => {
+    const restored = mergePersistedPrettyComState(
+      { rxDisplayMode: "bogus" as never },
+      usePrettyComStore.getState()
+    )
+    expect(restored.rxDisplayMode).toBe("terminal")
   })
 
   it("mergePersistedPrettyComState restores logs and highlight rules", () => {

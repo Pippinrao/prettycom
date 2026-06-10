@@ -7,6 +7,16 @@ export function emitMockEvent(event: string, payload: unknown) {
   listeners.get(event)?.forEach((fn) => fn(payload))
 }
 
+declare global {
+  interface Window {
+    __prettycomEmitMockEvent?: typeof emitMockEvent
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__prettycomEmitMockEvent = emitMockEvent
+}
+
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
     case "list_ports":

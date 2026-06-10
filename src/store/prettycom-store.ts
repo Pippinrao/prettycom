@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
 import { DEFAULT_SERIAL_CONFIG } from "@/data/serial-config"
+import { createDefaultAliases } from "@/data/serial-defaults"
 import { DEFAULT_TEST_PORT_A } from "@/data/test-ports"
 import { filterLogs } from "@/store/log-filter"
 import {
@@ -19,6 +20,7 @@ import type {
   LineSuffix,
   LogEntry,
   LogFilter,
+  RxDisplayMode,
   SendList,
   SerialConfig,
   SessionStatus,
@@ -80,6 +82,26 @@ function createInitialSessions(): SessionProfile[] {
   return isDevOrE2eRuntime() ? [createDevTestSession()] : []
 }
 
+export function normalizeRxDisplayMode(value: unknown): RxDisplayMode {
+  return value === "frame" ? "frame" : "terminal"
+}
+
+function finalizeMergedState(state: PrettyComState): PrettyComState {
+  const sessions = sanitizeProductionSessions(state.sessions)
+  const currentSessionId =
+    sessions.find((session) => session.id === state.currentSessionId)?.id ??
+    sessions[0]?.id ??
+    ""
+  const activeSession = sessions.find((session) => session.id === currentSessionId)
+  return {
+    ...state,
+    sessions,
+    currentSessionId,
+    selectedLogId: activeSession?.logs.at(-1)?.id ?? "",
+    rxDisplayMode: normalizeRxDisplayMode(state.rxDisplayMode),
+  }
+}
+
 export function mergePersistedPrettyComState(
   saved: Partial<PrettyComState> | undefined,
   current: PrettyComState
@@ -89,6 +111,7 @@ export function mergePersistedPrettyComState(
   )
   const filter = saved?.filter ? { ...current.filter, ...saved.filter } : current.filter
   const theme = normalizeTheme(saved?.theme ?? current.theme)
+  const rxDisplayMode = normalizeRxDisplayMode(saved?.rxDisplayMode ?? current.rxDisplayMode)
 
   if (!saved?.sessions?.length) {
     const sendLists = (saved?.sendLists ?? current.sendLists).map((list: SendList) => {
@@ -111,15 +134,18 @@ export function mergePersistedPrettyComState(
       })) as SendList["commands"]
       return migrated as SendList
     })
-    return {
+    return finalizeMergedState({
       ...current,
       ...saved,
       sendLists,
       maxLogEntriesPerSession,
       filter,
       theme,
+      rxDisplayMode,
       pendingScrollLogId: null,
-    }
+      commandOpen: false,
+      settingsOpen: false,
+    })
   }
 
   let sessions: SessionProfile[] = saved.sessions.map((session) => ({
@@ -139,12 +165,6 @@ export function mergePersistedPrettyComState(
         : session
     )
   }
-
-  const currentSessionId =
-    sessions.find((session) => session.id === saved.currentSessionId)?.id ??
-    sessions[0]?.id ??
-    ""
-  const activeSession = sessions.find((session) => session.id === currentSessionId)
 
   const sendLists = (saved.sendLists ?? current.sendLists).map((list: SendList) => {
     const migrated = { ...list } as SendList & { loopCount?: number; intervalMs?: number }
@@ -167,20 +187,19 @@ export function mergePersistedPrettyComState(
     return migrated as SendList
   })
 
-  return {
+  return finalizeMergedState({
     ...current,
     ...saved,
     sendLists,
     maxLogEntriesPerSession,
     filter,
     theme,
+    rxDisplayMode,
     sessions,
-    currentSessionId,
-    selectedLogId: activeSession?.logs.at(-1)?.id ?? "",
     pendingScrollLogId: null,
     commandOpen: false,
     settingsOpen: false,
-  }
+  })
 }
 
 interface PrettyComState {
@@ -193,6 +212,7 @@ interface PrettyComState {
   language: Language
   theme: Theme
   displayMode: DisplayMode
+  rxDisplayMode: RxDisplayMode
   suffix: LineSuffix
   commandOpen: boolean
   settingsOpen: boolean
@@ -226,6 +246,13 @@ interface PrettyComState {
   setLanguage: (language: Language) => void
   setTheme: (theme: Theme) => void
   setDisplayMode: (mode: DisplayMode) => void
+  setRxDisplayMode: (mode: RxDisplayMode) => void
+  updateLogEntry: (
+    sessionId: string,
+    logId: string,
+    patch: Partial<Pick<LogEntry, "ascii" | "hex" | "bytes">>,
+    rxAt?: number
+  ) => void
   setSuffix: (suffix: LineSuffix) => void
   setCommandOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
@@ -251,11 +278,12 @@ export const usePrettyComStore = create<PrettyComState>()(
       selectedLogId: "",
       commandText: "",
       commandHistory: [],
-      aliases: [],
+      aliases: createDefaultAliases(),
       filter: { search: "", highlight: "", highlightRules: [], direction: "all" },
       language: "zh-CN",
       theme: "dark",
       displayMode: "ascii",
+      rxDisplayMode: "terminal",
       suffix: "crlf",
       commandOpen: false,
       settingsOpen: false,
@@ -317,6 +345,23 @@ export const usePrettyComStore = create<PrettyComState>()(
             selectedLogId:
               state.selectedLogId === logId ? current?.logs.at(-1)?.id ?? "" : state.selectedLogId,
           }
+        }),
+      updateLogEntry: (sessionId, logId, patch, rxAt) =>
+        set((state) => {
+          const sessions = state.sessions.map((session) => {
+            if (session.id !== sessionId) {
+              return session
+            }
+            const logs = session.logs.map((entry) =>
+              entry.id === logId ? { ...entry, ...patch } : entry
+            )
+            return {
+              ...session,
+              logs,
+              lastRxAt: rxAt ?? session.lastRxAt,
+            }
+          })
+          return { sessions }
         }),
       clearLogs: (sessionId) =>
         set((state) => ({
@@ -427,6 +472,7 @@ export const usePrettyComStore = create<PrettyComState>()(
         set({ theme: nextTheme })
       },
       setDisplayMode: (displayMode) => set({ displayMode }),
+      setRxDisplayMode: (rxDisplayMode) => set({ rxDisplayMode }),
       setSuffix: (suffix) => set({ suffix }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
@@ -473,6 +519,7 @@ export const usePrettyComStore = create<PrettyComState>()(
       partialize: (state) => ({
         currentSessionId: state.currentSessionId,
         displayMode: state.displayMode,
+        rxDisplayMode: state.rxDisplayMode,
         suffix: state.suffix,
         sidebarOpen: state.sidebarOpen,
         inspectorTab: state.inspectorTab,

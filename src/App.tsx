@@ -143,7 +143,6 @@ import {
   createTxLogEntry,
   DEFAULT_SERIAL_CONFIG,
   formatLogPayload,
-  macros,
   parseHexString,
   parseSendListDsl,
   serializeSendList,
@@ -153,6 +152,7 @@ import { isDevOrE2eRuntime } from "@/lib/runtime-env"
 import { useT } from "@/hooks/use-t"
 import {
   closePort,
+  flushAllSessionRx,
   listPorts,
   openPort,
   setupSerialEventBridge,
@@ -636,27 +636,27 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     [nameCustomized]
   )
 
-  const refreshPorts = useCallback(
-    async (preferredPath?: string) => {
-      setLoading(true)
-      try {
-        const result = await listPorts()
-        setPorts(result)
-        if (!result.length) {
-          return
-        }
-        const currentPath = preferredPath ?? path
-        if (!currentPath || !result.some((port) => port.name === currentPath)) {
-          applySelectedPort(result[0].name)
-        }
-      } catch {
-        setPorts([])
-      } finally {
-        setLoading(false)
+  const refreshPorts = useCallback(async (preferredPath?: string) => {
+    setLoading(true)
+    try {
+      const result = await listPorts()
+      setPorts(result)
+      if (!result.length) {
+        return
       }
-    },
-    [applySelectedPort, path]
-  )
+      setPath((currentPath) => {
+        const candidate = preferredPath ?? currentPath
+        if (candidate && result.some((port) => port.name === candidate)) {
+          return candidate
+        }
+        return result[0].name
+      })
+    } catch {
+      setPorts([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -666,8 +666,15 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const initialPath = isDevOrE2eRuntime() ? DEFAULT_TEST_PORT_A : ""
     setPath(initialPath)
     setName(initialPath ? defaultSessionNameFromPath(initialPath) : "")
-    void refreshPorts(initialPath)
+    void refreshPorts(initialPath || undefined)
   }, [open, refreshPorts])
+
+  useEffect(() => {
+    if (!open || nameCustomized || !path) {
+      return
+    }
+    setName(defaultSessionNameFromPath(path))
+  }, [open, path, nameCustomized])
 
   const handleConnect = async () => {
     if (!path || busy) {
@@ -723,7 +730,7 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             {loading ? (
               <Skeleton className="h-9 rounded-md" />
             ) : ports.length ? (
-              <Select value={path} onValueChange={applySelectedPort}>
+              <Select value={path || undefined} onValueChange={applySelectedPort}>
                 <SelectTrigger className="w-full min-w-0 max-w-full truncate" data-testid="port-select">
                   <SelectValue placeholder={t("Select port")}>
                     {path ? (
@@ -987,7 +994,7 @@ function LogStream({ session }: { session: SessionProfile }) {
       return
     }
     parentRef.current.scrollTop = parentRef.current.scrollHeight
-  }, [autoScroll, logs.length, logs.at(-1)?.id])
+  }, [autoScroll, logs.length, logs.at(-1)?.id, logs.at(-1)?.bytes])
 
   useEffect(() => {
     if (!pendingScrollLogId || !logs.length) {
@@ -1068,6 +1075,8 @@ function LogTableHeader({ visibleCount, totalCount }: { visibleCount: number; to
   const t = useT()
   const filter = usePrettyComStore((state) => state.filter)
   const setFilter = usePrettyComStore((state) => state.setFilter)
+  const rxDisplayMode = usePrettyComStore((state) => state.rxDisplayMode)
+  const setRxDisplayMode = usePrettyComStore((state) => state.setRxDisplayMode)
   const activeRuleCount = filter.highlightRules.filter((rule) => rule.enabled && rule.pattern.trim()).length
   const filterActive = Boolean(filter.search || filter.direction !== "all")
 
@@ -1107,6 +1116,27 @@ function LogTableHeader({ visibleCount, totalCount }: { visibleCount: number; to
             </DropdownMenuContent>
           </DropdownMenu>
           <HighlightRulesDialog />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-2" data-testid="log-rx-display-mode">
+                {rxDisplayMode === "terminal" ? t("Terminal mode") : t("Frame mode")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>{t("RX display")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup
+                value={rxDisplayMode}
+                onValueChange={(value) => {
+                  flushAllSessionRx()
+                  setRxDisplayMode(value as typeof rxDisplayMode)
+                }}
+              >
+                <DropdownMenuRadioItem value="terminal">{t("Terminal mode")}</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="frame">{t("Frame mode")}</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Badge variant={filterActive ? "default" : "outline"} className="shrink-0" data-testid="log-filter-count">
           {visibleCount}/{totalCount}
@@ -1895,7 +1925,7 @@ function SendListPanel({ session }: { session: SessionProfile }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">{t("Commands")}</span>
+          <span className="text-[11px] font-medium text-muted-foreground">{t("Send list commands")}</span>
           <Button size="sm" variant="ghost" className="h-6 gap-1 text-xs" onClick={addCmd} disabled={running}>
             <Plus className="size-3" />
             {t("Add command")}
@@ -2181,7 +2211,13 @@ function CommandsPanel() {
                     {alias.command}
                   </button>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
-                    <Button size="icon" variant="ghost" className="size-6" onClick={() => insertAlias(alias)}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6"
+                      aria-label={t("Insert")}
+                      onClick={() => insertAlias(alias)}
+                    >
                       <Play className="size-3" />
                     </Button>
                     <Button size="icon" variant="ghost" className="size-6" onClick={() => openEditAlias(alias)}>
@@ -2200,42 +2236,6 @@ function CommandsPanel() {
             {t("No quick commands yet")} {t("Create shortcuts for commands you send often.")}
           </div>
         )}
-      </div>
-      <Separator />
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{t("Built-in macros")}</h3>
-          <Badge variant="secondary">{macros.length}</Badge>
-        </div>
-        <div className="min-w-0 divide-y divide-border/50 rounded-md border border-border/70">
-          {macros.map((macro) => (
-            <div
-              key={macro.id}
-              className="grid grid-cols-[minmax(0,5rem)_minmax(0,1fr)_auto] items-center gap-2 px-2 py-1.5 hover:bg-accent/30"
-              data-testid={`macro-item-${macro.id}`}
-            >
-              <button
-                type="button"
-                className="truncate text-left text-xs font-medium"
-                title={t(macro.name)}
-                onClick={() => setCommandText(macro.body)}
-              >
-                {t(macro.name)}
-              </button>
-              <button
-                type="button"
-                className="truncate text-left font-mono text-[11px] text-muted-foreground"
-                title={macro.body}
-                onClick={() => setCommandText(macro.body)}
-              >
-                {macro.body}
-              </button>
-              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={() => setCommandText(macro.body)}>
-                {t("Insert")}
-              </Button>
-            </div>
-          ))}
-        </div>
       </div>
       <Separator />
       <div className="space-y-2">
@@ -2391,7 +2391,16 @@ function GlobalCommand({ onOpenPort }: { onOpenPort: () => void }) {
   const setSettingsOpen = usePrettyComStore((state) => state.setSettingsOpen)
   const setDisplayMode = usePrettyComStore((state) => state.setDisplayMode)
   const setCommandText = usePrettyComStore((state) => state.setCommandText)
+  const setSuffix = usePrettyComStore((state) => state.setSuffix)
+  const aliases = usePrettyComStore((state) => state.aliases)
   const currentSession = usePrettyComStore((state) => state.getCurrentSession())
+
+  const insertAliasFromPalette = (alias: { command: string; mode: DisplayMode; suffix: LineSuffix }) => {
+    setCommandText(alias.command)
+    setDisplayMode(alias.mode)
+    setSuffix(alias.suffix)
+    setCommandOpen(false)
+  }
 
   const handleExport = async () => {
     if (!currentSession?.logs.length) {
@@ -2422,7 +2431,7 @@ function GlobalCommand({ onOpenPort }: { onOpenPort: () => void }) {
       data-testid="command-palette"
     >
       <Command>
-        <CommandInput placeholder={t("Open port, run macro, switch view...")} />
+        <CommandInput placeholder={t("Open port, insert quick command, switch view...")} />
         <CommandList>
           <CommandEmpty>{t("No command found.")}</CommandEmpty>
           <CommandGroup heading={t("Serial")}>
@@ -2450,22 +2459,19 @@ function GlobalCommand({ onOpenPort }: { onOpenPort: () => void }) {
               {t("Switch log to HEX")}
             </CommandItem>
           </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading={t("Macros")}>
-            {macros.map((macro) => (
-              <CommandItem
-                key={macro.id}
-                onSelect={() => {
-                  setCommandText(macro.body)
-                  setCommandOpen(false)
-                }}
-              >
-                <Play className="size-4" />
-                {t("Insert")} {t(macro.name)}
-                <CommandShortcut>{macro.shortcut}</CommandShortcut>
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {aliases.length ? (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading={t("Quick commands")}>
+                {aliases.map((alias) => (
+                  <CommandItem key={alias.id} onSelect={() => insertAliasFromPalette(alias)}>
+                    <Play className="size-4" />
+                    {t("Insert")} {t(alias.name)}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          ) : null}
           <CommandSeparator />
           <CommandGroup heading={t("Workspace")}>
             <CommandItem

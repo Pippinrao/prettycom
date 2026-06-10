@@ -7,6 +7,13 @@ import {
   createRxLogEntry,
   createSysLogEntry,
 } from "@/data/serial-defaults"
+import {
+  clearRxCoalesce,
+  flushRxCoalesce,
+  ingestRxChunk,
+  registerRxEmitHandler,
+  type RxEmit,
+} from "@/lib/rx-coalesce"
 import { usePrettyComStore } from "@/store/prettycom-store"
 import type {
   PortInfo,
@@ -17,9 +24,59 @@ import type {
 
 let bridgeCount = 0
 let listenersReady = false
+let rxHandlerRegistered = false
 let listenersSetupPromise: Promise<void> | null = null
 let unlistenRx: UnlistenFn | null = null
 let unlistenStatus: UnlistenFn | null = null
+const openTerminalRxLog = new Map<string, string>()
+
+function clearTerminalRxLog(sessionId: string) {
+  openTerminalRxLog.delete(sessionId)
+}
+
+function handleRxEmit(sessionId: string, emit: RxEmit) {
+  const store = usePrettyComStore.getState()
+  const payload = {
+    ascii: bytesToAscii(emit.bytes),
+    hex: bytesToHex(emit.bytes),
+    bytes: emit.bytes.length,
+  }
+
+  if (store.rxDisplayMode === "frame") {
+    const entry = createRxLogEntry(emit.bytes, emit.startedAtMs, emit.priorRxAt)
+    store.appendLog(sessionId, entry, emit.endedAtMs)
+    return
+  }
+
+  const openId = openTerminalRxLog.get(sessionId)
+  if (emit.kind === "partial") {
+    if (openId) {
+      store.updateLogEntry(sessionId, openId, payload, emit.endedAtMs)
+      return
+    }
+    const entry = createRxLogEntry(emit.bytes, emit.startedAtMs, emit.priorRxAt)
+    store.appendLog(sessionId, entry, emit.endedAtMs)
+    openTerminalRxLog.set(sessionId, entry.id)
+    return
+  }
+
+  if (openId) {
+    store.updateLogEntry(sessionId, openId, payload, emit.endedAtMs)
+    clearTerminalRxLog(sessionId)
+    return
+  }
+
+  const entry = createRxLogEntry(emit.bytes, emit.startedAtMs, emit.priorRxAt)
+  store.appendLog(sessionId, entry, emit.endedAtMs)
+}
+
+function ensureRxEmitHandler() {
+  if (rxHandlerRegistered) {
+    return
+  }
+  registerRxEmitHandler(handleRxEmit)
+  rxHandlerRegistered = true
+}
 
 function canUseTauriEvents() {
   if (import.meta.env.MODE === "test" || import.meta.env.PRETTYCOM_E2E_MOCK === "1") {
@@ -63,7 +120,19 @@ export async function writePort(sessionId: string, data: number[] | Uint8Array):
   return invoke<number>("write_port", { sessionId, data: payload })
 }
 
+export function flushAllSessionRx() {
+  const store = usePrettyComStore.getState()
+  for (const session of store.sessions) {
+    flushRxCoalesce(session.id)
+    clearRxCoalesce(session.id)
+    clearTerminalRxLog(session.id)
+  }
+}
+
 export async function closePort(sessionId: string): Promise<void> {
+  flushRxCoalesce(sessionId)
+  clearRxCoalesce(sessionId)
+  clearTerminalRxLog(sessionId)
   return invoke("close_port", { sessionId })
 }
 
@@ -79,12 +148,14 @@ async function ensureListeners() {
         const bytes = base64ToBytes(data)
         const store = usePrettyComStore.getState()
         const session = store.sessions.find((item) => item.id === sessionId)
-        const entry = createRxLogEntry(bytes, timestampMs, session?.lastRxAt)
-        store.appendLog(sessionId, entry, timestampMs)
+        ingestRxChunk(sessionId, bytes, timestampMs, store.rxDisplayMode, session?.lastRxAt)
       })
 
       unlistenStatus = await listen<SerialStatusPayload>("serial-status", (event) => {
         const { sessionId, status, message } = event.payload
+        flushRxCoalesce(sessionId)
+        clearRxCoalesce(sessionId)
+        clearTerminalRxLog(sessionId)
         const store = usePrettyComStore.getState()
         store.setSessionStatus(sessionId, status === "error" ? "error" : "disconnected")
         if (message) {
@@ -126,6 +197,7 @@ async function teardownListeners() {
 }
 
 export function setupSerialEventBridge(): () => void {
+  ensureRxEmitHandler()
   if (!canUseTauriEvents()) {
     return () => {}
   }

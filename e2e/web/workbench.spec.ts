@@ -77,8 +77,8 @@ test("auto-scroll toggle", async ({ page }) => {
 })
 
 /** @fc F13 */
-test("insert macro into composer", async ({ page }) => {
-  await page.getByTestId("macro-item-reset").getByRole("button", { name: /插入|Insert/i }).click()
+test("insert quick command into composer", async ({ page }) => {
+  await page.getByTestId("alias-item-reset").getByRole("button", { name: /插入|Insert/i }).click()
   await expect(page.locator("[data-testid=command-input]")).toContainText("AT+RST")
 })
 

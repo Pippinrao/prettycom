@@ -14,7 +14,6 @@ fn main() {
       "--disable-background-networking ",
       "--disable-sync ",
       "--disable-features=Translate,ChromeWhatsNewUI,InterestFeedContentSuggestions,UseSkiaRenderer ",
-      "--js-flags=--max-old-space-size=64",
     ),
   );
   app_lib::run();

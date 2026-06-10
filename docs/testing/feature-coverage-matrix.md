@@ -7,25 +7,26 @@
 | F01 | 默认会话与侧栏 | store.test | Y | - | test-default / COM10 |
 | F02 | 连接/断开 | serial.test | Y | COM10 | mock invoke open/close |
 | F03 | ASCII 发送+后缀 | defaults.test | Y | 环回 | mock echo RX |
-| F04 | 打开串口对话框 | - | - | scaffold | Desktop 脚手架占位，非完整 E2E |
-| F05 | 多会话切换 | store.test | - | - | |
-| F06 | 删除会话 | store.test | - | - | |
+| F04 | 打开串口对话框 | - | Y | scaffold | mock list_ports + connect |
+| F05 | 多会话切换 | store.test | Y | - | 侧栏切换会话 |
+| F06 | 删除会话 | store.test | Y | - | 多会话时右键删除其一 |
 | F07 | 发送按钮禁用态 | - | Y | - | 未连接 |
 | F08 | 日志搜索过滤 | log-filter.test | Y | - | |
-| F09 | 方向过滤 | log-filter.test | - | - | |
+| F09 | 方向过滤 | log-filter.test | Y | - | RX/TX 方向筛选 |
 | F10 | Auto-scroll | store.test | Y | - | |
-| F11 | 清空日志 | store.test | - | - | |
+| F11 | 清空日志 | store.test | Y | - | clear-logs 确认 |
 | F12 | 导出日志 | defaults.test | Y | dialog mock | |
 | F13 | 宏插入 | - | Y | - | AT+RST |
 | F14 | 别名 CRUD | store.test | - | - | |
 | F15 | 最近命令历史 | store.test | - | - | |
 | F16 | 语言切换 | i18n.test | Y | - | zh-CN ↔ en-US |
-| F17 | 命令面板 | - | - | - | 后续补 E2E |
+| F17 | 命令面板 | - | Y | - | Ctrl+K |
 | F18 | HEX 发送 | defaults.test | scaffold | 环回 | Desktop 脚手架占位 |
 | F19 | 高亮规则列表 | log-highlight.test | Y | - | 关键词/正则/颜色、无效正则保护、测试预览与定位到日志 |
-| F20 | 日志表头筛选布局 | - | 手工/截图 | - | 搜索、方向、高亮入口位于日志表头 |
-| F21 | 侧栏收起不遮挡 | - | 手工/截图 | - | 收起宽度约 48px，主区左边界对齐 |
-| F22 | 打开串口主按钮 | - | 手工/截图 | - | 顶部主按钮 + 插头图标；当前会话按钮显示连接/断开语义 |
+| F20 | 日志表头筛选布局 | - | Y | - | 搜索、方向、高亮入口位于日志表头 |
+| F21 | 侧栏收起不遮挡 | - | Y | - | 收起后主区左移 |
+| F22 | 打开串口主按钮 | - | Y | - | open-port-btn + 连接语义 |
+| F25 | RX 终端/逐帧显示 | rx-coalesce.test | Y | - | 终端合并至换行；逐帧每包一行 |
 | F23 | 进程退出释放串口 | lib.rs unit | 手工 | - | 关闭窗口后外部进程可重新打开端口；**禁止**自动化依赖 COM5/STM32 |
 | F24 | 非 Tauri Web 预览保护 | serial.test | 手工/截图 | - | 无 Tauri runtime 时不注册 event bridge，避免白屏 |
 | - | Frame/Parse 解析 | N/A | N/A | N/A | 占位 UI，不测 |

@@ -162,9 +162,16 @@ export function serializeSendList(list: SendList): string {
     `@suffix:${list.suffix}`,
     `@mode:${list.mode}`,
     SENDLIST_SEPARATOR,
-    ...list.commands.map(
-      (cmd) => `${cmd.command} @loop:${cmd.loopCount} @interval:${cmd.intervalMs}`
-    ),
+    ...list.commands.map((cmd) => {
+      const parts = [cmd.command, `@loop:${cmd.loopCount}`, `@interval:${cmd.intervalMs}`]
+      if (cmd.suffix !== list.suffix) {
+        parts.push(`@suffix:${cmd.suffix}`)
+      }
+      if (cmd.mode !== list.mode) {
+        parts.push(`@mode:${cmd.mode}`)
+      }
+      return parts.join(" ")
+    }),
   ]
   return lines.join("\n")
 }
@@ -191,12 +198,17 @@ export function parseSendListDsl(dsl: string): {
     }
   }
 
+  const listSuffix = (meta["suffix"] as LineSuffix) || "crlf"
+  const listMode = (meta["mode"] as DisplayMode) || "ascii"
+
   const commands: SendListCommand[] = commandLines
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#"))
     .map((raw) => {
       let loopCount = 1
       let intervalMs = 500
+      let suffix = listSuffix
+      let mode = listMode
       const loopMatch = raw.match(/@loop:(\d+)/)
       if (loopMatch) {
         loopCount = Number(loopMatch[1])
@@ -205,15 +217,27 @@ export function parseSendListDsl(dsl: string): {
       if (intervalMatch) {
         intervalMs = Number(intervalMatch[1])
       }
+      const suffixMatch = raw.match(/@suffix:(\w+)/)
+      if (suffixMatch) {
+        suffix = suffixMatch[1] as LineSuffix
+      }
+      const modeMatch = raw.match(/@mode:(\w+)/)
+      if (modeMatch) {
+        mode = modeMatch[1] as DisplayMode
+      }
       const command = raw
         .replace(/@loop:\d+/, "")
         .replace(/@interval:\d+/, "")
+        .replace(/@suffix:\w+/, "")
+        .replace(/@mode:\w+/, "")
         .trim()
       return {
         id: crypto.randomUUID(),
         command,
         loopCount,
         intervalMs,
+        suffix,
+        mode,
       }
     })
 
@@ -221,8 +245,8 @@ export function parseSendListDsl(dsl: string): {
     name: meta["name"] || "",
     listLoop: Number(meta["listloop"]) || 1,
     listIntervalMs: Number(meta["listinterval"]) || 500,
-    suffix: (meta["suffix"] as LineSuffix) || "crlf",
-    mode: (meta["mode"] as DisplayMode) || "ascii",
+    suffix: listSuffix,
+    mode: listMode,
     commands,
   }
 }

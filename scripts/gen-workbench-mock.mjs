@@ -1,0 +1,20 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const root = path.dirname(fileURLToPath(import.meta.url));
+const canvasPath = path.join(root, "..", "design-preview", "prettycom-workbench.canvas.tsx");
+let src = fs.readFileSync(canvasPath, "utf8");
+src = src.replace(/import[\s\S]*?from "cursor\/canvas";\r?\n/, 'import { Row, Spacer, Stack } from "./layout"\n\n');
+src = src.replace(/^const tokens = /m, "export const tokens = ");
+src = src.replace(/^type ThemeKind/m, "export type ThemeKind");
+src = src.replace(/^type SchemeKind/m, "export type SchemeKind");
+src = src.replace(/^const STABLE_TESTIDS/m, "export const STABLE_TESTIDS");
+src = src.replace(/^const CHANGING_DOM/m, "export const CHANGING_DOM");
+src = src.replace(/^function WorkbenchMock/m, "export function WorkbenchMock");
+src = src.replace(/^function SettingsSnippet/m, "export function SettingsSnippet");
+src = src.replace(/<Text style=\{\{ fontSize: 13, color: t\.foreground, flex: 1 \}\} weight="medium">([\s\S]*?)<\/Text>/m,
+  '<span style={{ fontSize: 13, color: t.foreground, flex: 1, fontWeight: 500 }}>$1</span>');
+src = src.replace(/export default function PrettycomWorkbenchPreview[\s\S]*$/m, "");
+const out = path.join(root, "..", "design-preview", "shared", "workbench-mock.tsx");
+fs.writeFileSync(out, src, "utf8");
+console.log("wrote", out);

@@ -22,6 +22,7 @@ import type {
   LogFilter,
   RxDisplayMode,
   SendList,
+  SendListCommand,
   SerialConfig,
   SessionStatus,
   Theme,
@@ -86,6 +87,66 @@ export function normalizeRxDisplayMode(value: unknown): RxDisplayMode {
   return value === "frame" ? "frame" : "terminal"
 }
 
+function normalizeDisplayMode(value: unknown): DisplayMode {
+  return value === "hex" ? "hex" : "ascii"
+}
+
+function normalizeLineSuffix(value: unknown): LineSuffix {
+  if (value === "none" || value === "cr" || value === "lf" || value === "crlf") {
+    return value
+  }
+  return "crlf"
+}
+
+export function migrateSendListCommands(
+  commands: SendListCommand[],
+  listDefaults: { suffix: LineSuffix; mode: DisplayMode }
+): SendListCommand[] {
+  return commands.map((cmd) => ({
+    id: cmd.id,
+    command: cmd.command ?? "",
+    loopCount: cmd.loopCount ?? 1,
+    intervalMs: cmd.intervalMs ?? 500,
+    suffix: normalizeLineSuffix(cmd.suffix ?? listDefaults.suffix),
+    mode: normalizeDisplayMode(cmd.mode ?? listDefaults.mode),
+  }))
+}
+
+function migrateSendLists(sendLists: SendList[]): SendList[] {
+  return sendLists.map((list) => {
+    const migrated = { ...list } as SendList & { loopCount?: number; intervalMs?: number }
+    if (migrated.loopCount !== undefined) {
+      migrated.listLoop = migrated.loopCount
+      delete migrated.loopCount
+    }
+    if (migrated.intervalMs !== undefined) {
+      migrated.listIntervalMs = migrated.intervalMs
+      delete migrated.intervalMs
+    }
+    if (migrated.listLoop === undefined) migrated.listLoop = 1
+    if (migrated.listIntervalMs === undefined) migrated.listIntervalMs = 500
+    const listSuffix = normalizeLineSuffix(migrated.suffix)
+    const listMode = normalizeDisplayMode(migrated.mode)
+    migrated.suffix = listSuffix
+    migrated.mode = listMode
+    migrated.commands = migrateSendListCommands(migrated.commands ?? [], {
+      suffix: listSuffix,
+      mode: listMode,
+    })
+    return migrated as SendList
+  })
+}
+
+function migrateDisplayModes(saved: Partial<PrettyComState> | undefined): {
+  logDisplayMode: DisplayMode
+  sendDisplayMode: DisplayMode
+} {
+  const legacy = (saved as { displayMode?: DisplayMode } | undefined)?.displayMode
+  const logDisplayMode = normalizeDisplayMode(saved?.logDisplayMode ?? legacy ?? "ascii")
+  const sendDisplayMode = normalizeDisplayMode(saved?.sendDisplayMode ?? legacy ?? "ascii")
+  return { logDisplayMode, sendDisplayMode }
+}
+
 function finalizeMergedState(state: PrettyComState): PrettyComState {
   const sessions = sanitizeProductionSessions(state.sessions)
   const currentSessionId =
@@ -99,6 +160,8 @@ function finalizeMergedState(state: PrettyComState): PrettyComState {
     currentSessionId,
     selectedLogId: activeSession?.logs.at(-1)?.id ?? "",
     rxDisplayMode: normalizeRxDisplayMode(state.rxDisplayMode),
+    logDisplayMode: normalizeDisplayMode(state.logDisplayMode),
+    sendDisplayMode: normalizeDisplayMode(state.sendDisplayMode),
   }
 }
 
@@ -112,38 +175,24 @@ export function mergePersistedPrettyComState(
   const filter = saved?.filter ? { ...current.filter, ...saved.filter } : current.filter
   const theme = normalizeTheme(saved?.theme ?? current.theme)
   const rxDisplayMode = normalizeRxDisplayMode(saved?.rxDisplayMode ?? current.rxDisplayMode)
+  const { logDisplayMode, sendDisplayMode } = migrateDisplayModes(saved)
+  const inspectorTab =
+    saved?.inspectorTab === "port" ? "commands" : (saved?.inspectorTab ?? current.inspectorTab)
 
   if (!saved?.sessions?.length) {
-    const sendLists = (saved?.sendLists ?? current.sendLists).map((list: SendList) => {
-      const migrated = { ...list } as SendList & { loopCount?: number; intervalMs?: number }
-      if (migrated.loopCount !== undefined) {
-        migrated.listLoop = migrated.loopCount
-        delete migrated.loopCount
-      }
-      if (migrated.intervalMs !== undefined) {
-        migrated.listIntervalMs = migrated.intervalMs
-        delete migrated.intervalMs
-      }
-      if (migrated.listLoop === undefined) migrated.listLoop = 1
-      if (migrated.listIntervalMs === undefined) migrated.listIntervalMs = 500
-      migrated.commands = migrated.commands.map((cmd) => ({
-        id: cmd.id,
-        command: cmd.command,
-        loopCount: cmd.loopCount ?? 1,
-        intervalMs: cmd.intervalMs ?? 500,
-      })) as SendList["commands"]
-      return migrated as SendList
-    })
+    const sendLists = migrateSendLists(saved?.sendLists ?? current.sendLists)
     return finalizeMergedState({
       ...current,
       ...saved,
       sendLists,
+      inspectorTab,
       maxLogEntriesPerSession,
       filter,
       theme,
       rxDisplayMode,
+      logDisplayMode,
+      sendDisplayMode,
       pendingScrollLogId: null,
-      commandOpen: false,
       settingsOpen: false,
     })
   }
@@ -166,38 +215,21 @@ export function mergePersistedPrettyComState(
     )
   }
 
-  const sendLists = (saved.sendLists ?? current.sendLists).map((list: SendList) => {
-    const migrated = { ...list } as SendList & { loopCount?: number; intervalMs?: number }
-    if (migrated.loopCount !== undefined) {
-      migrated.listLoop = migrated.loopCount
-      delete migrated.loopCount
-    }
-    if (migrated.intervalMs !== undefined) {
-      migrated.listIntervalMs = migrated.intervalMs
-      delete migrated.intervalMs
-    }
-    if (migrated.listLoop === undefined) migrated.listLoop = 1
-    if (migrated.listIntervalMs === undefined) migrated.listIntervalMs = 500
-    migrated.commands = migrated.commands.map((cmd) => ({
-      id: cmd.id,
-      command: cmd.command,
-      loopCount: cmd.loopCount ?? 1,
-      intervalMs: cmd.intervalMs ?? 500,
-    })) as SendList["commands"]
-    return migrated as SendList
-  })
+  const sendLists = migrateSendLists(saved.sendLists ?? current.sendLists)
 
   return finalizeMergedState({
     ...current,
     ...saved,
     sendLists,
+    inspectorTab,
     maxLogEntriesPerSession,
     filter,
     theme,
     rxDisplayMode,
+    logDisplayMode,
+    sendDisplayMode,
     sessions,
     pendingScrollLogId: null,
-    commandOpen: false,
     settingsOpen: false,
   })
 }
@@ -211,12 +243,13 @@ interface PrettyComState {
   filter: LogFilter
   language: Language
   theme: Theme
-  displayMode: DisplayMode
+  logDisplayMode: DisplayMode
+  sendDisplayMode: DisplayMode
   rxDisplayMode: RxDisplayMode
   suffix: LineSuffix
-  commandOpen: boolean
   settingsOpen: boolean
   sidebarOpen: boolean
+  inspectorOpen: boolean
   inspectorTab: string
   autoScroll: boolean
   pendingScrollLogId: string | null
@@ -245,7 +278,8 @@ interface PrettyComState {
   setFilter: (patch: Partial<LogFilter>) => void
   setLanguage: (language: Language) => void
   setTheme: (theme: Theme) => void
-  setDisplayMode: (mode: DisplayMode) => void
+  setLogDisplayMode: (mode: DisplayMode) => void
+  setSendDisplayMode: (mode: DisplayMode) => void
   setRxDisplayMode: (mode: RxDisplayMode) => void
   updateLogEntry: (
     sessionId: string,
@@ -254,9 +288,9 @@ interface PrettyComState {
     rxAt?: number
   ) => void
   setSuffix: (suffix: LineSuffix) => void
-  setCommandOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setSidebarOpen: (open: boolean) => void
+  setInspectorOpen: (open: boolean) => void
   setInspectorTab: (tab: string) => void
   setAutoScroll: (autoScroll: boolean) => void
   setPendingScrollLogId: (logId: string | null) => void
@@ -282,12 +316,13 @@ export const usePrettyComStore = create<PrettyComState>()(
       filter: { search: "", highlight: "", highlightRules: [], direction: "all" },
       language: "zh-CN",
       theme: "dark",
-      displayMode: "ascii",
+      logDisplayMode: "ascii",
+      sendDisplayMode: "ascii",
       rxDisplayMode: "terminal",
       suffix: "crlf",
-      commandOpen: false,
       settingsOpen: false,
       sidebarOpen: true,
+      inspectorOpen: true,
       inspectorTab: "commands",
       autoScroll: true,
       pendingScrollLogId: null,
@@ -471,12 +506,13 @@ export const usePrettyComStore = create<PrettyComState>()(
         applyTheme(nextTheme)
         set({ theme: nextTheme })
       },
-      setDisplayMode: (displayMode) => set({ displayMode }),
+      setLogDisplayMode: (logDisplayMode) => set({ logDisplayMode }),
+      setSendDisplayMode: (sendDisplayMode) => set({ sendDisplayMode }),
       setRxDisplayMode: (rxDisplayMode) => set({ rxDisplayMode }),
       setSuffix: (suffix) => set({ suffix }),
-      setCommandOpen: (commandOpen) => set({ commandOpen }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
+      setInspectorOpen: (inspectorOpen) => set({ inspectorOpen }),
       setInspectorTab: (inspectorTab) => set({ inspectorTab }),
       setAutoScroll: (autoScroll) => set({ autoScroll }),
       setPendingScrollLogId: (pendingScrollLogId) => set({ pendingScrollLogId }),
@@ -518,10 +554,12 @@ export const usePrettyComStore = create<PrettyComState>()(
       name: "prettycom-ui-state",
       partialize: (state) => ({
         currentSessionId: state.currentSessionId,
-        displayMode: state.displayMode,
+        logDisplayMode: state.logDisplayMode,
+        sendDisplayMode: state.sendDisplayMode,
         rxDisplayMode: state.rxDisplayMode,
         suffix: state.suffix,
         sidebarOpen: state.sidebarOpen,
+        inspectorOpen: state.inspectorOpen,
         inspectorTab: state.inspectorTab,
         commandHistory: state.commandHistory,
         aliases: state.aliases,

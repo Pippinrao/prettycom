@@ -6,6 +6,7 @@ import {
   createSessionProfile,
   DEV_TEST_SESSION_ID,
   mergePersistedPrettyComState,
+  migrateSendListCommands,
   normalizeRxDisplayMode,
   sanitizeProductionSessions,
   usePrettyComStore,
@@ -254,5 +255,65 @@ describe("prettycom-store", () => {
       usePrettyComStore.getState().addSession(session)
     }
     expect(usePrettyComStore.getState().sessions.length).toBeLessThanOrEqual(MAX_SESSIONS)
+  })
+
+  it("migrates legacy displayMode to logDisplayMode and sendDisplayMode", () => {
+    const restored = mergePersistedPrettyComState(
+      { displayMode: "hex" } as Record<string, unknown>,
+      usePrettyComStore.getState()
+    )
+    expect(restored.logDisplayMode).toBe("hex")
+    expect(restored.sendDisplayMode).toBe("hex")
+  })
+
+  it("setLogDisplayMode and setSendDisplayMode update independently", () => {
+    usePrettyComStore.getState().setLogDisplayMode("hex")
+    usePrettyComStore.getState().setSendDisplayMode("ascii")
+    expect(usePrettyComStore.getState().logDisplayMode).toBe("hex")
+    expect(usePrettyComStore.getState().sendDisplayMode).toBe("ascii")
+  })
+
+  it("migrateSendListCommands fills per-command suffix and mode from list defaults", () => {
+    const migrated = migrateSendListCommands(
+      [
+        {
+          id: "c1",
+          command: "AT",
+          loopCount: 2,
+          intervalMs: 100,
+        } as never,
+      ],
+      { suffix: "lf", mode: "hex" }
+    )
+    expect(migrated[0].suffix).toBe("lf")
+    expect(migrated[0].mode).toBe("hex")
+  })
+
+  it("mergePersistedPrettyComState migrates send list commands with suffix and mode", () => {
+    const restored = mergePersistedPrettyComState(
+      {
+        sendLists: [
+          {
+            id: "list-1",
+            name: "Test",
+            commands: [{ id: "c1", command: "AT+RST", loopCount: 1, intervalMs: 50, suffix: "crlf", mode: "ascii" }],
+            listLoop: 1,
+            listIntervalMs: 500,
+            suffix: "crlf",
+            mode: "ascii",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      },
+      usePrettyComStore.getState()
+    )
+    expect(restored.sendLists[0].commands[0].suffix).toBe("crlf")
+    expect(restored.sendLists[0].commands[0].mode).toBe("ascii")
+  })
+
+  it("setInspectorOpen persists inspector panel state", () => {
+    usePrettyComStore.getState().setInspectorOpen(false)
+    expect(usePrettyComStore.getState().inspectorOpen).toBe(false)
   })
 })

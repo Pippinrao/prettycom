@@ -10,12 +10,25 @@
 - 可操作控件必须有清晰标签或无障碍名称，图标按钮需要可理解的 `aria-label` 或 tooltip。
 - 普通 Web 预览环境不能因为缺少 Tauri runtime 而白屏；Tauri API 事件监听应仅在 Tauri 环境或 E2E mock 环境中启用。
 
+## 日志 Chrome（LogChrome）
+
+- 原 **LogToolbar** 与 **LogTableHeader** 第一层已合并为单一 **LogChrome** 组件，减少垂直占用。
+- LogChrome 分为两层：
+  - **工具行（约 44px）**：连接态指示点、搜索、方向筛选、高亮规则、RX 显示模式、**日志格式**（`logDisplayMode`，ASCII/HEX）、自动滚动、**更多操作**（`log-more-menu`）。
+  - **列头行（约 28px）**：时间、方向、载荷、字节、间隔。
+- **更多操作**菜单（`log-more-menu`）收纳次要操作：导出日志、清空、可见/总条数、高亮规则计数。
+- 工具行须 `min-w-0 overflow-x-auto`，保证右边界控件可滚动到达、不被检查器裁切。
+- 不再在日志区重复展示 Live/Idle 徽章（连接态由 TopBar 承担）。
+- **日志格式**（`logDisplayMode`）与命令发送区的**发送格式**（`sendDisplayMode`）为独立状态，互不影响。
+- 无日志时显示空状态；开发环境下空状态提供「开发样本」按钮（`dev-sample-btn`），加载后 LogChrome 出现。
+- 筛选无匹配时 LogChrome 保持可见；仅在列表区域显示「没有匹配的日志」。
+- 自动滚动开启时按钮须有明显底色（`bg-primary/15` + `border-primary/25`），并保持 `aria-pressed`。
+- 以下 `data-testid` 须保持稳定：`log-search`、`log-filter-direction`、`log-rx-display-mode`、`log-display-mode`、`auto-scroll-toggle`、`log-more-menu`、`clear-logs-btn`、`log-filter-count`、`highlight-rules-open`。
+
 ## 日志表头、筛选与高亮
 
-- 日志筛选入口必须放在日志表头区域，而不是挤占顶部全局工具栏。
-- 表头区域分为两层：
-  - 第一层放筛选控件、方向筛选、高亮规则入口、当前可见条数/总条数。
-  - 第二层放列名：时间、方向、载荷、字节、间隔。
+- 日志筛选入口位于 **LogChrome** 工具行（不再使用独立 LogToolbar）。
+- 表头区域分为两层（见上文 LogChrome）；列名层仍为：时间、方向、载荷、字节、间隔。
 - 搜索筛选只负责过滤可见日志，不应改变原始日志数据。
 - 筛选无匹配时，日志表头（含搜索框、方向筛选、高亮入口）必须保持可见；仅在日志列表区域显示「没有匹配的日志」。
 - 方向筛选应支持全部、RX、TX、SYS。
@@ -37,14 +50,13 @@
 ## 本地持久化
 
 - UI 状态通过 Zustand `persist` 写入浏览器 `localStorage`，键名 `prettycom-ui-state`。
-- 必须持久化：会话列表（含各会话 RX/TX 日志）、高亮规则（`filter.highlightRules`）、方向筛选、日志保留上限、**主题（`theme`）**、**默认发送后缀（`suffix`）**、最近命令、别名与界面偏好。
+- 必须持久化：会话列表（含各会话 RX/TX 日志）、高亮规则（`filter.highlightRules`）、方向筛选、日志保留上限、**主题（`theme`）**、**默认发送后缀（`suffix`）**、**日志显示模式（`logDisplayMode`）**、**发送显示模式（`sendDisplayMode`）**、**工具面板开关（`inspectorOpen`）**、最近命令、别名、**发送列表**与界面偏好。
 - 每个会话日志条数受「日志保留上限」约束，默认 **3000** 条，可在设置中调整（500–100000）；超出时丢弃最旧条目。
 - 重启后串口连接状态一律恢复为未连接；未读计数清零。
 - 生产构建不得预置 Test Port / COM10 等开发或 E2E 占位会话；仅 dev 服务器与 E2E mock 环境可注入 `test-default` 会话。
 - **完整卸载**（NSIS setup.exe 与 MSI 安装包）必须删除 `%LOCALAPPDATA%\com.prettycom.app`、`%APPDATA%\com.prettycom.app` 及 `HKCU\Software\prettycom\PrettyCOM`；覆盖升级时不删除用户数据。
 - 用户手动导出的日志文件不在卸载清理范围内。
 - 新安装默认可提供一组示例快捷命令（如 AT+RST），与普通快捷命令相同，用户可编辑或删除；不得单独展示「内置宏」区块。
-- 发送列表编辑区中，列表名称下方的命令区标题应使用「命令列表」，不得复用检查器「常用命令」标签文案。
 - 用户数据（会话、日志、快捷命令、发送列表、高亮规则、主题等）保存在 WebView2 本地存储，路径约为 `%LOCALAPPDATA%\\com.prettycom.app\\EBWebView\\`。
 - **NSIS 卸载**（`PrettyCOM_*_setup.exe`）：完整卸载时会自动删除上述应用数据目录（升级安装不清理）。
 - **MSI 卸载**：仅移除程序文件与快捷方式，**不会**自动删除应用数据；需手动删除 `%LOCALAPPDATA%\\com.prettycom.app` 与 `%APPDATA%\\com.prettycom.app`，或使用 NSIS 安装包卸载。
@@ -57,34 +69,88 @@
 - 行布局应稳定，列宽变化不能导致行高抖动。
 - 选中行、RX/TX/SYS 方向色、删除按钮 hover 态都应保持可辨识。
 - 筛选后必须显示可见条数/总条数，便于确认筛选范围。
+- RX/TX/SYS 方向色使用语义 token（`log-rx` / `log-tx` / `log-sys`），深浅主题均须可辨识；禁止在行样式中硬编码 `sky-*` / `emerald-*` 等 Tailwind 色板类名。
+
+## 状态栏（StatusBar）
+
+- 位于日志流与底部命令发送区之间，高度约 **24px**（`h-6`）。
+- **仅当当前会话存在至少一条日志时显示**；空日志或清空后隐藏。
+- 展示：连接态（绿点 + 已连接端口 / 空闲 / 端口错误）、RX 累计字节、TX 累计字节、可见/总日志条数、自动滚动开/关。
+- `data-testid="status-bar"` 须保持稳定。
+
+## 日志行右键菜单
+
+- 每条日志行支持右键上下文菜单（`ContextMenu`）。
+- 菜单项：**复制载荷**（当前日志显示模式下的 payload）、**复制 HEX**（原始 hex 字段）、**删除日志记录**（与行内删除按钮等价）。
+- 以下 `data-testid` 须保持稳定：`log-row-copy-payload`、`log-row-copy-hex`、`log-row-delete`（菜单项）。
+
+## 键盘快捷键
+
+- **Ctrl/Cmd+L**：聚焦日志搜索框（`log-search`）；无 LogChrome 时无效果。
+- **Mod+Enter**：在命令输入区发送（已有）。
+
+## 设置面板
+
+- 设置 Sheet 采用**扁平行列表**布局（标签 + 控件两列），不使用 Card 嵌套 Card。
+- 以下 `data-testid` 须保持稳定：`language-select`、`log-retention-limit`、`theme-select`、`default-suffix-select`。
 
 ## 侧栏布局
 
 - 左侧会话栏展开时占据固定宽度，主工作区从侧栏右侧开始。
-- 左侧会话栏收起时只能保留图标栏宽度，不能遮挡顶部栏、日志表头、日志内容或右侧检查器。
+- 左侧会话栏收起时只能保留图标栏宽度，不能遮挡顶部栏、日志表头、日志内容或右侧工具面板。
 - 当前实测目标：收起状态侧栏宽度约为 `48px`，主工作区左边界应与侧栏右边界对齐。
 - 侧栏收起按钮必须始终可见且可点击。
+- 会话删除入口位于会话行末尾 inline 删除按钮（`session-row-delete-{sessionId}`），hover 显示；右键菜单删除为次要入口。Footer 不再放置独立「移除会话」按钮。
+- **icon 折叠态**：会话项仅居中显示连接状态点（`StatusDot`），隐藏会话名与删除按钮；Header Logo 居中缩小为 `size-7`；Settings 按钮 icon-only + tooltip。
 
 ## 命令发送区
 
-- 命令发送区位于工作台底部，采用上下结构：上方全宽输入、下方单行工具栏。
-- 输入区使用 CodeMirror，随内容自动增高：**最小约 1 行（40px）**，**最大约 3 行（96px）**；超出时在输入框内滚动，长命令应启用换行（`lineWrapping`）。
-- 工具栏与输入区同一列，不再使用右侧固定宽度竖条；工具栏单行排列（窄屏可 `flex-wrap` 到第二行）：
-  - 左侧：行尾后缀选择（`suffix-select`）、ASCII/HEX 模式。
-  - 中间：循环发送开关（`loop-send-toggle`）、间隔毫秒（`loop-interval-ms`）、循环中状态徽章（`loop-send-active`）。
-  - 右侧：主发送按钮（`send-command`），与工具栏行高一致。
+- 命令发送区位于工作台底部，采用**单行并列结构**：左侧 CodeMirror 输入、`send-options-trigger` 下拉菜单、发送按钮。
+- 输入区随内容自动增高：**最小约 40px**，**最大约 96px**（最多约 3 行）；超出时在输入框内滚动，长命令应启用换行（`lineWrapping`）。
+- **发送选项**（`send-options-trigger`）DropdownMenu 收纳后缀（`send-suffix-*`）与发送格式（`send-format-*`）；触发器摘要展示当前 `CRLF · ASCII` 类文案。
+- **Mod+Enter** 提示通过发送按钮 Tooltip 展示，不占第二行。
+- **不提供循环发送**：底部命令区仅支持单次发送；带循环与间隔的批量发送统一在工具面板「列表发送」标签中配置（见下文）。
 - 编辑器主题须跟随设置中的 `theme`（浅色/深色），不得硬编码为 dark。
 - 多行输入下 **Mod-Enter**（Ctrl/Cmd+Enter）发送命令；普通 Enter 仍用于换行。
-- 以下 `data-testid` 须保持稳定，供 E2E 与自动化使用：`command-input`、`suffix-select`、`send-command`、`loop-send-toggle`、`loop-interval-ms`、`loop-send-active`。
+- 快捷命令与最近命令历史仅在工具面板「常用命令」标签维护。
+- 以下 `data-testid` 须保持稳定，供 E2E 与自动化使用：`command-input`、`send-options-trigger`、`send-suffix-*`、`send-format-*`、`send-command`。
+
+## 工具面板（原检查器）
+
+- UI 标题为 **「工具」**（英文 `Tools panel`）；`data-testid` 前缀 `inspector-*` **保持不变**。
+- 标题栏高度约 **48px**（`h-12`），展示工具面板标题与当前会话端口；**不提供 Pin 固定按钮**。
+- **两标签**：`inspector-tab-commands`（常用命令）、`inspector-tab-sendlist`（**列表发送**）；**已删除 Port 页签**（串口参数移至 TopBar）。
+- 右栏使用嵌套 `SidebarProvider` + `<Sidebar side="right" collapsible="icon">`，宽度 `--sidebar-width: 17.5rem`（280px）；**不再**使用 `ResizablePanelGroup` 分割。
+- 折叠开关：`inspector-toggle`（TopBar）与侧栏 `SidebarRail`；折叠态宽约 `48px`，展开态约 `280px`。
+- icon 折叠态：纵向两枚 tab 图标（常用命令 / 列表发送）+ Tooltip。
+- `data-testid="inspector-panel"` 须保持稳定。
+
+## 列表发送（工具面板）
+
+- 入口位于右侧工具面板 **「列表发送」** 标签（`inspector-tab-sendlist`），不在底部命令发送区。
+- 支持多条发送列表的创建、选择、重命名与删除；列表数据随 `prettycom-ui-state` 持久化。
+- **添加/编辑命令**通过 `send-list-cmd-dialog` 弹窗完成，列表行只读展示；字段含命令正文、发送次数（0=无限）、间隔毫秒、后缀、ASCII/HEX 格式。
+- 每条命令独立配置 `suffix` 与 `mode`；列表级 `suffix`/`mode` 仅作新命令默认值，**不在列表底部展示**两个 Select。
+- 列表行展示规范：主行 `font-mono` 命令正文；次行人类可读 meta（如「发送 1 次 · 间隔 50 ms · CRLF · ASCII」），**禁止**行内 `1×50ms` 网格编辑。
+- 主操作为 **「全部发送」** / **「停止发送」**：按命令顺序依次发送，每条命令按自身循环次数、间隔与 suffix/mode 执行；运行中进度徽章使用「第 n/m 条 · 第 k 次发送」类文案。
+- 列表底部保留：列表名称、列表循环、列表间隔、「全部发送/停止」、DSL 导入导出（icon 按钮）。
+- 串口断开或发送失败时须停止列表发送，避免后台继续写端口。
+- 支持 DSL 导入/导出（含 `@loop`、`@interval`、可选逐条 `@suffix`/`@mode` 及列表级元数据）。
+- 发送列表编辑区中，列表名称下方的命令区标题应使用「命令列表」，不得复用工具面板「常用命令」标签文案。
 
 ## 串口打开与连接按钮
 
-- 顶部“打开串口”入口必须是明显的主操作按钮，并带有插头类图标。
-- 当前会话的连接按钮必须明确展示动作语义：
+- **打开串口**仅保留 TopBar 一处主入口（`open-port-btn`），带插头图标；侧栏不再重复「工具 → 打开串口」或底部重复按钮。
+- TopBar **不提供**刷新串口按钮；刷新串口仅在打开串口对话框内（`refresh-ports-btn`）。
+- 无会话空状态仅保留 TopBar 打开串口入口，居中区域不再放置第二颗打开串口按钮。
+- 当前会话的连接/断开由 TopBar `session-connect-toggle` 承担，语义明确：
   - 未连接时显示“连接串口 + 端口号”。
   - 已连接时显示“断开串口 + 端口号”。
   - 错误状态应使用错误色但仍保留可操作入口。
 - 端口号应使用紧凑的等宽标签展示，便于快速识别 COM 口。
+- 连接按钮之后须展示完整串口参数条（`session-port-params`）：波特率、数据位/校验/停止位、流控缩写（无 / RTS / XON）；连接态/错误态颜色与连接按钮一致。
+- 会话名行不再重复展示 `· 115200 8N1` 类摘要（参数已由 `session-port-params` 承担）。
+- 工具面板折叠开关位于 TopBar（`inspector-toggle`）。
 - 打开串口对话框中的确认按钮仍使用“打开并连接”，用于创建新会话并立即连接。
 
 ## 串口生命周期

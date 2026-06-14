@@ -5,18 +5,16 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
 import {
-  Activity,
   Bolt,
-  Braces,
   CircleAlert,
   CircleOff,
-  Command as CommandIcon,
+  Copy,
   Crosshair,
   Download,
   Eraser,
   Filter,
-  Gauge,
-  Layers3,
+  ListOrdered,
+  MoreHorizontal,
   PanelRight,
   Pencil,
   Play,
@@ -27,6 +25,7 @@ import {
   Search,
   Send,
   Settings,
+  SlidersHorizontal,
   Timer,
   Trash2,
   Unplug,
@@ -48,24 +47,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Command,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-  CommandShortcut,
-} from "@/components/ui/command"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -82,6 +63,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -89,11 +71,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
@@ -120,13 +97,14 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -202,9 +180,30 @@ function formatConfigLabel(config: SerialConfig) {
   return `${config.baudRate} · ${config.dataBits}${parity}${config.stopBits}`
 }
 
+function formatFlowControlShort(config: SerialConfig, t: (key: string) => string) {
+  if (config.flowControl === "hardware") {
+    return "RTS"
+  }
+  if (config.flowControl === "software") {
+    return "XON"
+  }
+  return t("None")
+}
+
+function formatPortParamsLabel(config: SerialConfig, t: (key: string) => string) {
+  return `${formatConfigLabel(config)} · ${formatFlowControlShort(config, t)}`
+}
+
+function formatSendListCommandMeta(cmd: SendListCommand, t: (key: string) => string) {
+  const loopText =
+    cmd.loopCount === 0 ? t("Repeat forever") : t("Send N times").replace("{n}", String(cmd.loopCount))
+  const intervalText = t("Interval ms").replace("{ms}", String(cmd.intervalMs))
+  const suffixText = t(suffixLabel[cmd.suffix])
+  const modeText = cmd.mode === "hex" ? "HEX" : "ASCII"
+  return `${loopText} · ${intervalText} · ${suffixText} · ${modeText}`
+}
+
 function App() {
-  const commandOpen = usePrettyComStore((state) => state.commandOpen)
-  const setCommandOpen = usePrettyComStore((state) => state.setCommandOpen)
   const sidebarOpen = usePrettyComStore((state) => state.sidebarOpen)
   const setSidebarOpen = usePrettyComStore((state) => state.setSidebarOpen)
   const theme = usePrettyComStore((state) => state.theme)
@@ -216,28 +215,16 @@ function App() {
 
   useEffect(() => setupSerialEventBridge(), [])
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault()
-        setCommandOpen(!commandOpen)
-      }
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [commandOpen, setCommandOpen])
-
   return (
     <TooltipProvider>
       <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-          <AppSidebar onOpenPort={() => setOpenPortDialogOpen(true)} />
+          <AppSidebar />
           <SidebarInset className="min-w-0 flex-1">
             <Workbench onOpenPort={() => setOpenPortDialogOpen(true)} />
           </SidebarInset>
         </div>
         <OpenPortDialog open={openPortDialogOpen} onOpenChange={setOpenPortDialogOpen} />
-        <GlobalCommand onOpenPort={() => setOpenPortDialogOpen(true)} />
       </SidebarProvider>
     </TooltipProvider>
   )
@@ -290,30 +277,45 @@ function SessionSidebarMenuItem({
   onSelect: () => void
 }) {
   const t = useT()
+  const { state } = useSidebar()
+  const collapsed = state === "collapsed"
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="group/session">
             <SidebarMenuButton
               isActive={isActive}
               tooltip={`${session.name} · ${session.path}`}
               onClick={onSelect}
               data-testid={`session-item-${session.id}`}
+              className={cn(collapsed && "justify-center")}
             >
               <StatusDot status={session.status} />
-              <span>{session.name}</span>
+              <span className="truncate group-data-[collapsible=icon]:hidden">{session.name}</span>
             </SidebarMenuButton>
-            <SidebarMenuBadge className="gap-1">
-              {session.unread > 0 && (
+            {session.unread > 0 && !collapsed ? (
+              <SidebarMenuBadge>
                 <Badge variant="secondary" className="h-4 px-1 text-[10px]">
                   {session.unread}
                 </Badge>
-              )}
-              {session.path}
-            </SidebarMenuBadge>
+              </SidebarMenuBadge>
+            ) : null}
+            {!collapsed ? (
+              <SidebarMenuAction
+                showOnHover
+                aria-label={t("Remove session")}
+                data-testid={`session-row-delete-${session.id}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setDeleteOpen(true)
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </SidebarMenuAction>
+            ) : null}
           </SidebarMenuItem>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -332,27 +334,7 @@ function SessionSidebarMenuItem({
   )
 }
 
-function SidebarRemoveSessionButton({ session }: { session: SessionProfile }) {
-  const t = useT()
-  const [deleteOpen, setDeleteOpen] = useState(false)
-
-  return (
-    <>
-      <Button
-        variant="ghost"
-        className="mx-2 mb-1 justify-start gap-2 group-data-[collapsible=icon]:hidden"
-        onClick={() => setDeleteOpen(true)}
-        data-testid="sidebar-remove-session"
-      >
-        <Trash2 className="size-4" />
-        {t("Remove session")}
-      </Button>
-      <SessionRemoveDialog session={session} open={deleteOpen} onOpenChange={setDeleteOpen} />
-    </>
-  )
-}
-
-function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
+function AppSidebar() {
   const t = useT()
   const sessions = usePrettyComStore((state) => state.sessions)
   const currentSessionId = usePrettyComStore((state) => state.currentSessionId)
@@ -360,32 +342,14 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
   const setSettingsOpen = usePrettyComStore((state) => state.setSettingsOpen)
   const currentSession = sessions.find((session) => session.id === currentSessionId)
 
-  const handleExport = async () => {
-    if (!currentSession?.logs.length) {
-      return
-    }
-    try {
-      const path = await save({
-        defaultPath: `${currentSession.name}-log.csv`,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      })
-      if (!path) {
-        return
-      }
-      await writeTextFile(path, formatLogsForCsv(currentSession.logs))
-    } catch {
-      window.alert(t("Export failed"))
-    }
-  }
-
   return (
     <Sidebar variant="sidebar" collapsible="icon" className="border-r border-border/70">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1.5">
+        <div className="flex items-center gap-2 px-2 py-1.5 group-data-[collapsible=icon]:justify-center">
           <img
             src="/app-icon.png"
             alt=""
-            className="size-8 shrink-0 rounded-lg"
+            className="size-8 shrink-0 rounded-lg group-data-[collapsible=icon]:size-7"
             width={32}
             height={32}
           />
@@ -411,26 +375,6 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarSeparator />
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("Tools")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip={t("Open port")} onClick={onOpenPort}>
-                  <PlugZap className="size-4" />
-                  <span>{t("Open Port")}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip={t("Log export")} onClick={() => void handleExport()}>
-                  <Download className="size-4" />
-                  <span>{t("Export Logs")}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         {currentSession?.status === "error" ? (
@@ -440,12 +384,12 @@ function AppSidebar({ onOpenPort }: { onOpenPort: () => void }) {
             <AlertDescription>{currentSession.path}</AlertDescription>
           </Alert>
         ) : null}
-        {currentSession ? <SidebarRemoveSessionButton session={currentSession} /> : null}
         <Button
           variant="ghost"
-          className="mx-2 justify-start gap-2 group-data-[collapsible=icon]:justify-center"
+          className="mx-2 justify-start gap-2 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
           onClick={() => setSettingsOpen(true)}
           data-testid="settings-open"
+          title={t("Settings")}
         >
           <Settings className="size-4" />
           <span className="group-data-[collapsible=icon]:hidden">{t("Settings")}</span>
@@ -462,7 +406,20 @@ function Workbench({ onOpenPort }: { onOpenPort: () => void }) {
   const currentSessionId = usePrettyComStore((state) => state.currentSessionId)
   const settingsOpen = usePrettyComStore((state) => state.settingsOpen)
   const setSettingsOpen = usePrettyComStore((state) => state.setSettingsOpen)
+  const inspectorOpen = usePrettyComStore((state) => state.inspectorOpen)
+  const setInspectorOpen = usePrettyComStore((state) => state.setInspectorOpen)
   const currentSession = sessions.find((session) => session.id === currentSessionId) ?? sessions[0]
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
+        event.preventDefault()
+        document.querySelector<HTMLInputElement>('[data-testid="log-search"]')?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   if (!currentSession) {
     return (
@@ -485,12 +442,8 @@ function Workbench({ onOpenPort }: { onOpenPort: () => void }) {
             </div>
             <h3 className="mt-4 text-sm font-medium">{t("Open a port to start")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t("Create a serial session from the sidebar or the button above.")}
+              {t("Click Open Port in the top bar to create a serial session.")}
             </p>
-            <Button className="mt-4 gap-2" onClick={onOpenPort}>
-              <PlugZap className="size-4" />
-              {t("Open Port")}
-            </Button>
           </div>
         </div>
         <SettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} />
@@ -501,19 +454,21 @@ function Workbench({ onOpenPort }: { onOpenPort: () => void }) {
   return (
     <main className="flex h-screen min-w-0 flex-col">
       <TopBar session={currentSession} onOpenPort={onOpenPort} />
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-        <ResizablePanel defaultSize={66} minSize={45} className="min-w-[620px]">
-          <div className="flex h-full min-h-0 flex-col">
-            <LogToolbar session={currentSession} />
+      <SidebarProvider
+        open={inspectorOpen}
+        onOpenChange={setInspectorOpen}
+        className="min-h-0 flex-1"
+        style={{ "--sidebar-width": "17.5rem" } as React.CSSProperties}
+      >
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <LogStream session={currentSession} />
+            <StatusBar session={currentSession} />
             <CommandComposer session={currentSession} />
           </div>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={34} minSize={26} className="min-w-[360px]">
           <Inspector session={currentSession} />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </SidebarProvider>
       <SettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} />
     </main>
   )
@@ -521,18 +476,11 @@ function Workbench({ onOpenPort }: { onOpenPort: () => void }) {
 
 function TopBar({ session, onOpenPort }: { session: SessionProfile; onOpenPort: () => void }) {
   const t = useT()
-  const setCommandOpen = usePrettyComStore((state) => state.setCommandOpen)
   const setSessionStatus = usePrettyComStore((state) => state.setSessionStatus)
   const appendLog = usePrettyComStore((state) => state.appendLog)
+  const inspectorOpen = usePrettyComStore((state) => state.inspectorOpen)
+  const setInspectorOpen = usePrettyComStore((state) => state.setInspectorOpen)
   const [busy, setBusy] = useState(false)
-
-  const refreshPorts = async () => {
-    try {
-      await listPorts()
-    } catch {
-      /* ignore in browser dev */
-    }
-  }
 
   const toggleConnection = async () => {
     if (busy) {
@@ -561,15 +509,15 @@ function TopBar({ session, onOpenPort }: { session: SessionProfile; onOpenPort: 
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/70 px-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/70 px-3">
+      <div className="flex min-w-0 items-center gap-2.5">
         <SidebarTrigger label={t("Toggle Sidebar")} />
         <Separator orientation="vertical" className="h-5" />
         <Button
           variant={session.status === "connected" ? "outline" : "default"}
           size="sm"
           className={cn(
-            "h-9 gap-2 rounded-md px-3 font-semibold",
+            "h-8 gap-2 rounded-md px-2.5 text-xs font-semibold",
             session.status === "connected" && "border-success/40 bg-success/10 text-success hover:bg-success/15",
             session.status === "error" && "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15"
           )}
@@ -577,36 +525,39 @@ function TopBar({ session, onOpenPort }: { session: SessionProfile; onOpenPort: 
           onClick={() => void toggleConnection()}
           data-testid="session-connect-toggle"
         >
-          {session.status === "connected" ? <Unplug className="size-4" /> : <PlugZap className="size-4" />}
+          {session.status === "connected" ? <Unplug className="size-3.5" /> : <PlugZap className="size-3.5" />}
           <span>{session.status === "connected" ? t("Disconnect port") : t("Connect port")}</span>
-          <span className="rounded border border-current/20 px-1.5 py-0.5 font-mono text-[11px] font-medium">
+          <span className="rounded border border-current/20 px-1.5 py-0.5 font-mono text-[10px] font-medium">
             {session.path}
           </span>
         </Button>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{session.name}</div>
-          <div className="truncate text-xs text-muted-foreground">{formatConfigLabel(session.config)}</div>
-        </div>
+        <span
+          className={cn(
+            "hidden shrink-0 font-mono text-[11px] text-muted-foreground sm:inline",
+            session.status === "connected" && "text-success",
+            session.status === "error" && "text-destructive"
+          )}
+          data-testid="session-port-params"
+        >
+          {formatPortParamsLabel(session.config, t)}
+        </span>
+        <div className="min-w-0 truncate text-sm font-medium">{session.name}</div>
       </div>
       <div className="flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={t("Refresh ports")} onClick={() => void refreshPorts()}>
-              <RefreshCcw className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t("Refresh ports")}</TooltipContent>
-        </Tooltip>
-        <Button size="sm" className="h-9 gap-2 font-semibold" onClick={onOpenPort} data-testid="open-port-btn">
-          <PlugZap className="size-4" />
-          {t("Open Port")}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-8 shrink-0"
+          aria-label={t("Toggle tools panel")}
+          title={t("Toggle tools panel")}
+          data-testid="inspector-toggle"
+          onClick={() => setInspectorOpen(!inspectorOpen)}
+        >
+          <PanelRight className="size-4" />
         </Button>
-        <Button variant="outline" className="h-8 gap-2" onClick={() => setCommandOpen(true)}>
-          <CommandIcon className="size-3.5" />
-          {t("Command")}
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            Ctrl K
-          </kbd>
+        <Button size="sm" className="h-8 gap-1.5 text-xs font-semibold" onClick={onOpenPort} data-testid="open-port-btn">
+          <PlugZap className="size-3.5" />
+          {t("Open Port")}
         </Button>
       </div>
     </header>
@@ -722,7 +673,7 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
           <div className="grid min-w-0 gap-1.5">
             <div className="flex items-center justify-between gap-2">
               <label className="text-sm font-medium">{t("Select port")}</label>
-              <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1" onClick={() => void refreshPorts(path)}>
+              <Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1" onClick={() => void refreshPorts(path)} data-testid="refresh-ports-btn">
                 <RefreshCcw className="size-3.5" />
                 {t("Refresh ports")}
               </Button>
@@ -869,104 +820,6 @@ function OpenPortDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   )
 }
 
-function LogToolbar({ session }: { session: SessionProfile }) {
-  const t = useT()
-  const displayMode = usePrettyComStore((state) => state.displayMode)
-  const setDisplayMode = usePrettyComStore((state) => state.setDisplayMode)
-  const clearLogs = usePrettyComStore((state) => state.clearLogs)
-  const setSessionLogs = usePrettyComStore((state) => state.setSessionLogs)
-  const autoScroll = usePrettyComStore((state) => state.autoScroll)
-  const setAutoScroll = usePrettyComStore((state) => state.setAutoScroll)
-
-  const loadDevSample = async () => {
-    const { createDevLogEntries } = await import("@/data/dev-samples")
-    setSessionLogs(session.id, createDevLogEntries())
-  }
-
-  const handleExport = async () => {
-    if (!session.logs.length) {
-      return
-    }
-    try {
-      const path = await save({
-        defaultPath: `${session.name}-log.csv`,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      })
-      if (!path) {
-        return
-      }
-      await writeTextFile(path, formatLogsForCsv(session.logs))
-    } catch {
-      window.alert(t("Export failed"))
-    }
-  }
-
-  return (
-    <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/70 px-3">
-      <div className="flex items-center gap-2">
-        <Badge variant="secondary" className="gap-1.5 rounded-md">
-          <Activity className="size-3.5" />
-          {session.status === "connected" ? t("Live") : t("Idle")}
-        </Badge>
-      </div>
-      <div className="flex items-center gap-2">
-        {import.meta.env.DEV ? (
-          <Button variant="outline" size="sm" className="gap-2" onClick={loadDevSample} data-testid="dev-sample-btn">
-            <RefreshCcw className="size-3.5" />
-            {t("Dev sample")}
-          </Button>
-        ) : null}
-        <Select value={displayMode} onValueChange={(value) => setDisplayMode(value as DisplayMode)}>
-          <SelectTrigger className="h-8 w-[116px]" data-testid="log-display-mode">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ascii">ASCII</SelectItem>
-            <SelectItem value="hex">HEX</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button variant="ghost" size="sm" className="gap-2" onClick={() => void handleExport()} disabled={!session.logs.length}>
-          <Download className="size-3.5" />
-          {t("Export Logs")}
-        </Button>
-        <Button
-          variant={autoScroll ? "secondary" : "ghost"}
-          size="sm"
-          className={cn("gap-2", autoScroll && "text-primary")}
-          data-testid="auto-scroll-toggle"
-          aria-pressed={autoScroll}
-          onClick={() => setAutoScroll(!autoScroll)}
-        >
-          <Timer className="size-3.5" />
-          {t("Auto-scroll")}
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2" disabled={!session.logs.length} data-testid="clear-logs-btn">
-              <Eraser className="size-3.5" />
-              {t("Clear")}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("Clear log history?")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("This removes all log entries from the current workspace history. Exported files are not affected.")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={() => clearLogs(session.id)} data-testid="clear-logs-confirm">
-                {t("Clear history")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </div>
-  )
-}
-
 function LogStream({ session }: { session: SessionProfile }) {
   const t = useT()
   const parentRef = useRef<HTMLDivElement>(null)
@@ -974,13 +827,19 @@ function LogStream({ session }: { session: SessionProfile }) {
   const selectedLogId = usePrettyComStore((state) => state.selectedLogId)
   const setSelectedLog = usePrettyComStore((state) => state.setSelectedLog)
   const deleteLogEntry = usePrettyComStore((state) => state.deleteLogEntry)
-  const displayMode = usePrettyComStore((state) => state.displayMode)
+  const setSessionLogs = usePrettyComStore((state) => state.setSessionLogs)
+  const logDisplayMode = usePrettyComStore((state) => state.logDisplayMode)
   const filter = usePrettyComStore((state) => state.filter)
   const autoScroll = usePrettyComStore((state) => state.autoScroll)
   const pendingScrollLogId = usePrettyComStore((state) => state.pendingScrollLogId)
   const setPendingScrollLogId = usePrettyComStore((state) => state.setPendingScrollLogId)
   const logs = useMemo(() => getFilteredLogs(session.id), [getFilteredLogs, session.id, session.logs, filter])
   const highlightRules = useMemo(() => getActiveHighlightRules(filter), [filter])
+
+  const loadDevSample = async () => {
+    const { createDevLogEntries } = await import("@/data/dev-samples")
+    setSessionLogs(session.id, createDevLogEntries())
+  }
 
   const rowVirtualizer = useVirtualizer({
     count: logs.length,
@@ -1013,7 +872,7 @@ function LogStream({ session }: { session: SessionProfile }) {
   const totalCount = session.logs.length
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       {!totalCount ? (
         <div className="flex h-full items-center justify-center p-8">
           <div className="max-w-sm text-center">
@@ -1026,11 +885,23 @@ function LogStream({ session }: { session: SessionProfile }) {
                 ? t("Open a port or send a command to start collecting RX/TX records. Development sample data is available only while running the dev server.")
                 : t("Open a port or send a command to start collecting RX/TX records.")}
             </p>
+            {import.meta.env.DEV ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 gap-2"
+                onClick={() => void loadDevSample()}
+                data-testid="dev-sample-btn"
+              >
+                <RefreshCcw className="size-3.5" />
+                {t("Dev sample")}
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (
         <>
-          <LogTableHeader visibleCount={logs.length} totalCount={totalCount} />
+          <LogChrome session={session} visibleCount={logs.length} totalCount={totalCount} />
           {logs.length ? (
             <div
               ref={parentRef}
@@ -1045,7 +916,7 @@ function LogStream({ session }: { session: SessionProfile }) {
                     <LogLine
                       key={entry.id}
                       entry={entry}
-                      displayMode={displayMode}
+                      logDisplayMode={logDisplayMode}
                       highlightRules={highlightRules}
                       zebra={virtualRow.index % 2 === 0}
                       selected={entry.id === selectedLogId}
@@ -1071,84 +942,189 @@ function LogStream({ session }: { session: SessionProfile }) {
   )
 }
 
-function LogTableHeader({ visibleCount, totalCount }: { visibleCount: number; totalCount: number }) {
+function LogChrome({
+  session,
+  visibleCount,
+  totalCount,
+}: {
+  session: SessionProfile
+  visibleCount: number
+  totalCount: number
+}) {
   const t = useT()
   const filter = usePrettyComStore((state) => state.filter)
   const setFilter = usePrettyComStore((state) => state.setFilter)
   const rxDisplayMode = usePrettyComStore((state) => state.rxDisplayMode)
   const setRxDisplayMode = usePrettyComStore((state) => state.setRxDisplayMode)
+  const logDisplayMode = usePrettyComStore((state) => state.logDisplayMode)
+  const setLogDisplayMode = usePrettyComStore((state) => state.setLogDisplayMode)
+  const clearLogs = usePrettyComStore((state) => state.clearLogs)
+  const autoScroll = usePrettyComStore((state) => state.autoScroll)
+  const setAutoScroll = usePrettyComStore((state) => state.setAutoScroll)
   const activeRuleCount = filter.highlightRules.filter((rule) => rule.enabled && rule.pattern.trim()).length
-  const filterActive = Boolean(filter.search || filter.direction !== "all")
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+
+  const handleExport = async () => {
+    if (!session.logs.length) {
+      return
+    }
+    try {
+      const path = await save({
+        defaultPath: `${session.name}-log.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      })
+      if (!path) {
+        return
+      }
+      await writeTextFile(path, formatLogsForCsv(session.logs))
+    } catch {
+      window.alert(t("Export failed"))
+    }
+  }
 
   return (
-    <div className="shrink-0 border-b border-border/70 bg-muted/45">
-      <div className="flex h-11 items-center justify-between gap-2 px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="relative min-w-[220px] max-w-[360px] flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-8 w-full pl-8"
-              placeholder={t("Filter logs...")}
-              value={filter.search}
-              onChange={(event) => setFilter({ search: event.target.value })}
-              data-testid="log-search"
-            />
-          </div>
+    <div className="min-w-0 shrink-0 border-b border-border/70 bg-muted">
+      <div className="flex h-11 min-w-0 items-center gap-2 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {session.status === "connected" ? (
+          <span className="size-1.5 shrink-0 rounded-full bg-success" aria-hidden />
+        ) : null}
+        <div className="relative min-w-[140px] max-w-[280px] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-8 w-full pl-8"
+            placeholder={t("Filter logs...")}
+            value={filter.search}
+            onChange={(event) => setFilter({ search: event.target.value })}
+            data-testid="log-search"
+          />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 text-xs" data-testid="log-filter-direction">
+              <Filter className="size-3.5" />
+              {filter.direction === "all" ? t("All directions") : filter.direction}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>{t("Direction filter")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={filter.direction}
+              onValueChange={(value) => setFilter({ direction: value as typeof filter.direction })}
+            >
+              <DropdownMenuRadioItem value="all">{t("All")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="RX">{t("RX")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="TX">{t("TX")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="SYS">{t("SYS")}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <HighlightRulesDialog />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 text-xs" data-testid="log-rx-display-mode">
+              {rxDisplayMode === "terminal" ? t("Terminal mode") : t("Frame mode")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>{t("RX display")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={rxDisplayMode}
+              onValueChange={(value) => {
+                flushAllSessionRx()
+                setRxDisplayMode(value as typeof rxDisplayMode)
+              }}
+            >
+              <DropdownMenuRadioItem value="terminal">{t("Terminal mode")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="frame">{t("Frame mode")}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <Select
+            value={logDisplayMode}
+            onValueChange={(value) => setLogDisplayMode(value as DisplayMode)}
+          >
+            <SelectTrigger className="h-8 w-[132px] text-xs" data-testid="log-display-mode">
+              <span className="truncate">
+                {t("Log format")}: {logDisplayMode === "hex" ? "HEX" : "ASCII"}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ascii">ASCII</SelectItem>
+              <SelectItem value="hex">HEX</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant={autoScroll ? "secondary" : "ghost"}
+            size="sm"
+            className={cn(
+              "h-8 shrink-0 gap-1.5 text-xs",
+              autoScroll && "border border-primary/25 bg-primary/15 text-primary"
+            )}
+            data-testid="auto-scroll-toggle"
+            aria-pressed={autoScroll}
+            onClick={() => setAutoScroll(!autoScroll)}
+          >
+            <Timer className="size-3.5" />
+            {t("Auto-scroll")}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 gap-2" data-testid="log-filter-direction">
-                <Filter className="size-3.5" />
-                {filter.direction === "all" ? t("All directions") : filter.direction}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 text-xs"
+                aria-label={t("More actions")}
+                data-testid="log-more-menu"
+              >
+                <MoreHorizontal className="size-3.5" />
+                {t("More")}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>{t("Direction filter")}</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>{t("More actions")}</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={filter.direction}
-                onValueChange={(value) => setFilter({ direction: value as typeof filter.direction })}
-              >
-                <DropdownMenuRadioItem value="all">{t("All")}</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="RX">{t("RX")}</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="TX">{t("TX")}</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="SYS">{t("SYS")}</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <HighlightRulesDialog />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 gap-2" data-testid="log-rx-display-mode">
-                {rxDisplayMode === "terminal" ? t("Terminal mode") : t("Frame mode")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>{t("RX display")}</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => void handleExport()}>
+                <Download className="size-3.5" />
+                {t("Export Logs")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setClearDialogOpen(true)} data-testid="clear-logs-btn">
+                <Eraser className="size-3.5" />
+                {t("Clear")}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={rxDisplayMode}
-                onValueChange={(value) => {
-                  flushAllSessionRx()
-                  setRxDisplayMode(value as typeof rxDisplayMode)
-                }}
-              >
-                <DropdownMenuRadioItem value="terminal">{t("Terminal mode")}</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="frame">{t("Frame mode")}</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
+              <DropdownMenuItem disabled className="text-xs" data-testid="log-filter-count">
+                {visibleCount}/{totalCount} {t("log entries")}
+              </DropdownMenuItem>
+              {activeRuleCount ? (
+                <DropdownMenuItem disabled className="gap-1 text-xs">
+                  <Bolt className="size-3" />
+                  {activeRuleCount} {t("Highlight rules")}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <Badge variant={filterActive ? "default" : "outline"} className="shrink-0" data-testid="log-filter-count">
-          {visibleCount}/{totalCount}
-        </Badge>
-        {activeRuleCount ? (
-          <Badge variant="secondary" className="shrink-0 gap-1">
-            <Bolt className="size-3" />
-            {activeRuleCount}
-          </Badge>
-        ) : null}
       </div>
-      <div className="grid h-8 grid-cols-[108px_54px_1fr_72px_64px_32px] items-center border-l-2 border-l-transparent px-4 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Clear log history?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("This removes all log entries from the current workspace history. Exported files are not affected.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => clearLogs(session.id)} data-testid="clear-logs-confirm">
+              {t("Clear history")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <div className="grid h-7 grid-cols-[108px_54px_1fr_72px_64px_32px] items-center border-l-2 border-l-transparent px-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         <span>{t("Time")}</span>
         <span>{t("Dir")}</span>
         <span>{t("Payload")}</span>
@@ -1165,7 +1141,7 @@ function HighlightRulesDialog() {
   const filter = usePrettyComStore((state) => state.filter)
   const setFilter = usePrettyComStore((state) => state.setFilter)
   const selectedLogId = usePrettyComStore((state) => state.selectedLogId)
-  const displayMode = usePrettyComStore((state) => state.displayMode)
+  const logDisplayMode = usePrettyComStore((state) => state.logDisplayMode)
   const getCurrentSession = usePrettyComStore((state) => state.getCurrentSession)
   const getFilteredLogs = usePrettyComStore((state) => state.getFilteredLogs)
   const setPendingScrollLogId = usePrettyComStore((state) => state.setPendingScrollLogId)
@@ -1182,8 +1158,8 @@ function HighlightRulesDialog() {
     const logs = getFilteredLogs(session.id)
     const selected = logs.find((entry) => entry.id === selectedLogId)
     const entry = selected ?? logs.at(-1)
-    return entry ? formatLogPayload(entry, displayMode) : ""
-  }, [displayMode, getCurrentSession, getFilteredLogs, open, selectedLogId])
+    return entry ? formatLogPayload(entry, logDisplayMode) : ""
+  }, [logDisplayMode, getCurrentSession, getFilteredLogs, open, selectedLogId])
 
   useEffect(() => {
     if (!open) {
@@ -1233,7 +1209,7 @@ function HighlightRulesDialog() {
       return
     }
     const logs = getFilteredLogs(session.id)
-    const logId = findFirstMatchingLogId(logs, rule, displayMode)
+    const logId = findFirstMatchingLogId(logs, rule, logDisplayMode)
     if (!logId) {
       setLocateErrorId(rule.id)
       return
@@ -1404,7 +1380,7 @@ function HighlightRulesDialog() {
 
 const LogLine = memo(function LogLine({
   entry,
-  displayMode,
+  logDisplayMode,
   highlightRules,
   zebra,
   selected,
@@ -1413,7 +1389,7 @@ const LogLine = memo(function LogLine({
   top,
 }: {
   entry: LogEntry
-  displayMode: DisplayMode
+  logDisplayMode: DisplayMode
   highlightRules: HighlightRule[]
   zebra: boolean
   selected: boolean
@@ -1422,59 +1398,151 @@ const LogLine = memo(function LogLine({
   top: number
 }) {
   const t = useT()
-  const payload = formatLogPayload(entry, displayMode)
+  const payload = formatLogPayload(entry, logDisplayMode)
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
   return (
-    <div
-      data-log-row="true"
-      data-testid={`log-row-${entry.id}`}
-      className={cn(
-        "group absolute left-0 grid h-[34px] w-full grid-cols-[108px_54px_1fr_72px_64px_32px] items-center border-b border-border/35 px-4 text-left transition-colors hover:bg-accent/50",
-        zebra && "bg-muted/20",
-        entry.direction === "RX" && "border-l-2 border-l-sky-500/50",
-        entry.direction === "TX" && "border-l-2 border-l-emerald-500/50",
-        entry.direction === "SYS" && "border-l-2 border-l-amber-500/40",
-        selected && "bg-primary/10 ring-1 ring-inset ring-primary/25"
-      )}
-      style={{ transform: `translateY(${top}px)` }}
-    >
-      <button type="button" className="contents text-left" onClick={onSelect}>
-        <span className="text-muted-foreground">{entry.time}</span>
-        <Badge
-          variant={entry.direction === "RX" ? "secondary" : entry.direction === "TX" ? "outline" : "default"}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          data-log-row="true"
+          data-testid={`log-row-${entry.id}`}
           className={cn(
-            "h-5 w-fit rounded-md px-1.5 text-[10px] font-semibold",
-            entry.direction === "RX" && "bg-sky-500/15 text-sky-300",
-            entry.direction === "TX" && "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-            entry.direction === "SYS" && "bg-muted text-muted-foreground"
+            "group absolute left-0 grid h-[34px] w-full grid-cols-[108px_54px_1fr_72px_64px_32px] items-center border-b border-border/35 px-4 text-left transition-colors hover:bg-accent/50",
+            zebra && "bg-muted/20",
+            entry.direction === "RX" && "border-l-2 border-l-log-rx/50",
+            entry.direction === "TX" && "border-l-2 border-l-log-tx/50",
+            entry.direction === "SYS" && "border-l-2 border-l-log-sys/40",
+            selected && "bg-primary/10 ring-1 ring-inset ring-primary/30"
           )}
+          style={{ transform: `translateY(${top}px)` }}
         >
-          {entry.direction}
-        </Badge>
-        <span
-          className={cn(
-            "truncate text-foreground",
-            entry.level === "success" && "text-success",
-            entry.level === "warning" && "text-warning",
-            entry.level === "error" && "text-destructive"
-          )}
-        >
-          {highlightText(payload, highlightRules)}
-        </span>
-        <span className="text-muted-foreground">{entry.bytes} bytes</span>
-        <span className="text-right text-muted-foreground">+{entry.delta}ms</span>
-      </button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
-        aria-label={t("Delete log entry")}
-        onClick={onDelete}
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
-    </div>
+          <button type="button" className="contents text-left" onClick={onSelect}>
+            <span className="text-muted-foreground">{entry.time}</span>
+            <Badge
+              variant={entry.direction === "RX" ? "secondary" : entry.direction === "TX" ? "outline" : "default"}
+              className={cn(
+                "h-5 w-fit rounded-md px-1.5 text-[10px] font-semibold",
+                entry.direction === "RX" && "bg-log-rx/15 text-log-rx",
+                entry.direction === "TX" && "border-log-tx/40 bg-log-tx/10 text-log-tx",
+                entry.direction === "SYS" && "bg-muted text-log-sys"
+              )}
+            >
+              {entry.direction}
+            </Badge>
+            <span
+              className={cn(
+                "truncate text-foreground",
+                entry.level === "success" && "text-success",
+                entry.level === "warning" && "text-warning",
+                entry.level === "error" && "text-destructive"
+              )}
+            >
+              {highlightText(payload, highlightRules)}
+            </span>
+            <span className="text-muted-foreground">{entry.bytes} bytes</span>
+            <span className="text-right text-muted-foreground">+{entry.delta}ms</span>
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
+            aria-label={t("Delete log entry")}
+            onClick={onDelete}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem data-testid="log-row-copy-payload" onSelect={() => void copyText(payload)}>
+          <Copy className="size-4" />
+          {t("Copy payload")}
+        </ContextMenuItem>
+        <ContextMenuItem data-testid="log-row-copy-hex" onSelect={() => void copyText(entry.hex)}>
+          <Copy className="size-4" />
+          {t("Copy HEX")}
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" data-testid="log-row-delete" onSelect={onDelete}>
+          <Trash2 className="size-4" />
+          {t("Delete log entry")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 });
+
+function formatByteCount(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes}B`
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)}KB`
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function StatusBar({ session }: { session: SessionProfile }) {
+  const t = useT()
+  const autoScroll = usePrettyComStore((state) => state.autoScroll)
+  const filter = usePrettyComStore((state) => state.filter)
+  const getFilteredLogs = usePrettyComStore((state) => state.getFilteredLogs)
+
+  const totalCount = session.logs.length
+  const visibleCount = useMemo(
+    () => getFilteredLogs(session.id).length,
+    [getFilteredLogs, session.id, session.logs, filter]
+  )
+
+  const { rxBytes, txBytes } = useMemo(() => {
+    let rxBytes = 0
+    let txBytes = 0
+    for (const entry of session.logs) {
+      if (entry.direction === "RX") {
+        rxBytes += entry.bytes
+      } else if (entry.direction === "TX") {
+        txBytes += entry.bytes
+      }
+    }
+    return { rxBytes, txBytes }
+  }, [session.logs])
+
+  if (!totalCount) {
+    return null
+  }
+
+  return (
+    <div
+      className="flex h-6 shrink-0 items-center gap-4 border-t border-border/70 bg-card px-3 text-[11px] text-muted-foreground"
+      data-testid="status-bar"
+    >
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className={cn("size-1.5 rounded-full", session.status === "connected" ? "bg-success" : "bg-muted-foreground/50")}
+          aria-hidden
+        />
+        {session.status === "connected"
+          ? `${t("Connected")} ${session.path}`
+          : session.status === "error"
+            ? t("Port error")
+            : t("Idle")}
+      </span>
+      <span>RX {formatByteCount(rxBytes)}</span>
+      <span>TX {formatByteCount(txBytes)}</span>
+      <span>
+        {visibleCount}/{totalCount} {t("log entries")}
+      </span>
+      <span>{autoScroll ? t("Auto-scroll on") : t("Auto-scroll off")}</span>
+    </div>
+  )
+}
 
 function CommandComposer({ session }: { session: SessionProfile }) {
   const t = useT()
@@ -1482,8 +1550,8 @@ function CommandComposer({ session }: { session: SessionProfile }) {
   const setCommandText = usePrettyComStore((state) => state.setCommandText)
   const suffix = usePrettyComStore((state) => state.suffix)
   const setSuffix = usePrettyComStore((state) => state.setSuffix)
-  const displayMode = usePrettyComStore((state) => state.displayMode)
-  const setDisplayMode = usePrettyComStore((state) => state.setDisplayMode)
+  const sendDisplayMode = usePrettyComStore((state) => state.sendDisplayMode)
+  const setSendDisplayMode = usePrettyComStore((state) => state.setSendDisplayMode)
   const appendLog = usePrettyComStore((state) => state.appendLog)
   const deleteLogEntry = usePrettyComStore((state) => state.deleteLogEntry)
   const addCommandHistory = usePrettyComStore((state) => state.addCommandHistory)
@@ -1505,7 +1573,7 @@ function CommandComposer({ session }: { session: SessionProfile }) {
       try {
         let bytes: Uint8Array
         let ascii: string
-        if (displayMode === "hex") {
+        if (sendDisplayMode === "hex") {
           bytes = parseHexString(command)
           ascii = command
         } else {
@@ -1522,7 +1590,7 @@ function CommandComposer({ session }: { session: SessionProfile }) {
           id: `history-${now}`,
           command,
           suffix,
-          mode: displayMode,
+          mode: sendDisplayMode,
           sentAt: new Date(now).toLocaleTimeString("en-US", { hour12: false }),
         })
         if (clearAfter) {
@@ -1552,7 +1620,7 @@ function CommandComposer({ session }: { session: SessionProfile }) {
       commandText,
       connected,
       deleteLogEntry,
-      displayMode,
+      sendDisplayMode,
       session.id,
       session.lastRxAt,
       setCommandText,
@@ -1586,9 +1654,12 @@ function CommandComposer({ session }: { session: SessionProfile }) {
   )
 
   return (
-    <div className="shrink-0 border-t border-border/70 bg-card/70 px-3 py-2">
-      <div className="flex flex-col gap-2">
-        <div className="overflow-hidden rounded-lg border border-border bg-background" data-testid="command-input">
+    <div className="shrink-0 border-t border-border/70 bg-card px-3 py-2">
+      <div className="flex items-end gap-2">
+        <div
+          className="min-h-10 max-h-24 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-background"
+          data-testid="command-input"
+        >
           <CodeMirror
             value={commandText}
             height="auto"
@@ -1600,40 +1671,75 @@ function CommandComposer({ session }: { session: SessionProfile }) {
             onChange={setCommandText}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={suffix} onValueChange={(value) => setSuffix(value as LineSuffix)} disabled={displayMode === "hex"}>
-              <SelectTrigger className="h-8 w-[7rem]" data-testid="suffix-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(suffixLabel).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {t(label)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={displayMode} onValueChange={(value) => setDisplayMode(value as DisplayMode)}>
-              <SelectTrigger className="h-8 w-[5.5rem]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ascii">ASCII</SelectItem>
-                <SelectItem value="hex">HEX</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            className="ml-auto h-8 gap-2"
-            disabled={!commandText.trim() || !connected || sending}
-            onClick={sendCommand}
-            data-testid="send-command"
-          >
-            <Send className="size-4" />
-            {connected ? t("Send command") : t("Not connected")}
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 gap-1.5 px-2.5 text-[11px] font-medium"
+              data-testid="send-options-trigger"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              <span>
+                {t(suffixLabel[suffix])} · {sendDisplayMode === "hex" ? "HEX" : "ASCII"}
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel>{t("Send options")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+              {t("Default suffix")}
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={suffix}
+              onValueChange={(value) => setSuffix(value as LineSuffix)}
+            >
+              {Object.entries(suffixLabel).map(([value, label]) => (
+                <DropdownMenuRadioItem
+                  key={value}
+                  value={value}
+                  disabled={sendDisplayMode === "hex"}
+                  data-testid={`send-suffix-${value}`}
+                >
+                  {t(label)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+              {t("Send format")}
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={sendDisplayMode}
+              onValueChange={(value) => setSendDisplayMode(value as DisplayMode)}
+            >
+              <DropdownMenuRadioItem value="ascii" data-testid="send-format-ascii">
+                ASCII
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="hex" data-testid="send-format-hex">
+                HEX
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className={cn(
+                "h-9 shrink-0 gap-1.5 px-3 text-xs font-semibold",
+                connected && "bg-success text-success-foreground hover:bg-success/90"
+              )}
+              disabled={!commandText.trim() || !connected || sending}
+              onClick={sendCommand}
+              data-testid="send-command"
+            >
+              <Send className="size-3.5" />
+              {connected ? t("Send command") : t("Not connected")}
+            </Button>
+          </TooltipTrigger>
+          {connected ? <TooltipContent>{t("Mod+Enter to send")}</TooltipContent> : null}
+        </Tooltip>
       </div>
     </div>
   )
@@ -1655,13 +1761,20 @@ function SendListPanel({ session }: { session: SessionProfile }) {
   const [dslOpen, setDslOpen] = useState(false)
   const [dslText, setDslText] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [cmdDialogOpen, setCmdDialogOpen] = useState(false)
+  const [editingCmdId, setEditingCmdId] = useState<string | null>(null)
+  const [draftCommand, setDraftCommand] = useState("")
+  const [draftLoopCount, setDraftLoopCount] = useState(1)
+  const [draftIntervalMs, setDraftIntervalMs] = useState(500)
+  const [draftSuffix, setDraftSuffix] = useState<LineSuffix>("crlf")
+  const [draftMode, setDraftMode] = useState<DisplayMode>("ascii")
   const sendingRef = useRef(false)
   const loopRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [sendProgress, setSendProgress] = useState<{ cmdIndex: number; loopIndex: number } | null>(null)
 
   const list = sendLists.find((l) => l.id === selectedId) ?? null
-
   const running = sendListRunningId === selectedId && selectedId !== null
+  const activeCommands = list?.commands.filter((c) => c.command.trim()) ?? []
 
   const updateList = (patch: Partial<SendList>) => {
     if (!selectedId) return
@@ -1674,7 +1787,7 @@ function SendListPanel({ session }: { session: SessionProfile }) {
     addSendList({
       id,
       name: `List ${sendLists.length + 1}`,
-      commands: [{ id: crypto.randomUUID(), command: "", loopCount: 1, intervalMs: 500 }],
+      commands: [],
       listLoop: 1,
       listIntervalMs: 500,
       suffix: "crlf",
@@ -1695,16 +1808,46 @@ function SendListPanel({ session }: { session: SessionProfile }) {
     setDeleteConfirm(false)
   }
 
-  const addCmd = () => {
+  const openCmdDialog = (cmd?: SendListCommand) => {
     if (!list) return
-    updateList({ commands: [...list.commands, { id: crypto.randomUUID(), command: "", loopCount: 1, intervalMs: 500 }] })
+    if (cmd) {
+      setEditingCmdId(cmd.id)
+      setDraftCommand(cmd.command)
+      setDraftLoopCount(cmd.loopCount)
+      setDraftIntervalMs(cmd.intervalMs)
+      setDraftSuffix(cmd.suffix)
+      setDraftMode(cmd.mode)
+    } else {
+      setEditingCmdId(null)
+      setDraftCommand("")
+      setDraftLoopCount(1)
+      setDraftIntervalMs(500)
+      setDraftSuffix(list.suffix)
+      setDraftMode(list.mode)
+    }
+    setCmdDialogOpen(true)
   }
 
-  const updateCmd = (cmdId: string, patch: Partial<SendListCommand>) => {
+  const saveCmdDialog = () => {
     if (!list) return
-    updateList({
-      commands: list.commands.map((c) => (c.id === cmdId ? { ...c, ...patch } : c)),
-    })
+    const command = draftCommand.trim()
+    if (!command) return
+    const nextCmd: SendListCommand = {
+      id: editingCmdId ?? crypto.randomUUID(),
+      command,
+      loopCount: Math.max(0, draftLoopCount),
+      intervalMs: Math.max(10, draftIntervalMs),
+      suffix: draftSuffix,
+      mode: draftMode,
+    }
+    if (editingCmdId) {
+      updateList({
+        commands: list.commands.map((c) => (c.id === editingCmdId ? nextCmd : c)),
+      })
+    } else {
+      updateList({ commands: [...list.commands, nextCmd] })
+    }
+    setCmdDialogOpen(false)
   }
 
   const deleteCmd = (cmdId: string) => {
@@ -1731,16 +1874,14 @@ function SendListPanel({ session }: { session: SessionProfile }) {
     setSendListRunning(selectedId)
 
     const sendOne = async (cmd: SendListCommand) => {
-      const suffix = list.suffix
-      const mode = list.mode
       const now = Date.now()
       let bytes: Uint8Array
       let ascii: string
-      if (mode === "hex") {
+      if (cmd.mode === "hex") {
         bytes = parseHexString(cmd.command)
         ascii = cmd.command
       } else {
-        const payload = applySuffix(cmd.command, suffix)
+        const payload = applySuffix(cmd.command, cmd.suffix)
         bytes = new TextEncoder().encode(payload)
         ascii = cmd.command
       }
@@ -1841,6 +1982,105 @@ function SendListPanel({ session }: { session: SessionProfile }) {
     setDslOpen(false)
   }
 
+  const progressText =
+    sendProgress && list
+      ? `${t("Send progress item")
+          .replace("{cmd}", String(sendProgress.cmdIndex + 1))
+          .replace("{total}", String(activeCommands.length))} · ${t("Send progress loop").replace(
+          "{n}",
+          String(sendProgress.loopIndex + 1)
+        )}`
+      : null
+
+  const cmdDialog = (
+    <Dialog open={cmdDialogOpen} onOpenChange={setCmdDialogOpen}>
+      <DialogContent className="sm:max-w-md" data-testid="send-list-cmd-dialog">
+        <DialogHeader>
+          <DialogTitle>{editingCmdId ? t("Edit list command") : t("Add list command")}</DialogTitle>
+          <DialogDescription>{t("Interval between command sends")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <label className="text-[11px] font-medium text-muted-foreground">{t("Command")}</label>
+            <Textarea
+              className="min-h-[72px] font-mono text-xs"
+              value={draftCommand}
+              onChange={(e) => setDraftCommand(e.target.value)}
+              placeholder="AT+RST"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">{t("Send count")}</label>
+              <Input
+                type="number"
+                min={0}
+                className="h-8 text-xs"
+                value={draftLoopCount}
+                onChange={(e) => setDraftLoopCount(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <p className="text-[10px] text-muted-foreground">{t("Repeat forever")} = 0</p>
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                {t("Interval between sends")}
+              </label>
+              <Input
+                type="number"
+                min={10}
+                step={10}
+                className="h-8 text-xs"
+                value={draftIntervalMs}
+                onChange={(e) => setDraftIntervalMs(Math.max(10, Number(e.target.value) || 10))}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">{t("Default suffix")}</label>
+              <Select
+                value={draftSuffix}
+                onValueChange={(value) => setDraftSuffix(value as LineSuffix)}
+                disabled={draftMode === "hex"}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(suffixLabel).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {t(label)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">{t("Send format")}</label>
+              <Select value={draftMode} onValueChange={(value) => setDraftMode(value as DisplayMode)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ascii">ASCII</SelectItem>
+                  <SelectItem value="hex">HEX</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setCmdDialogOpen(false)}>
+            {t("Cancel")}
+          </Button>
+          <Button onClick={saveCmdDialog} disabled={!draftCommand.trim()}>
+            {t("Save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (!list) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
@@ -1853,18 +2093,21 @@ function SendListPanel({ session }: { session: SessionProfile }) {
           <Plus className="size-3.5" />
           {t("New list")}
         </Button>
-        <Button size="sm" variant="ghost" className="gap-1" onClick={() => { setDslText(""); setDslOpen(true) }}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="gap-1"
+          onClick={() => {
+            setDslText("")
+            setDslOpen(true)
+          }}
+        >
           <Download className="size-3.5" />
           {t("Import DSL")}
         </Button>
       </div>
     )
   }
-
-  const progressText =
-    sendProgress
-      ? `#${sendProgress.cmdIndex + 1}/${list.commands.filter((c) => c.command.trim()).length} · ×${sendProgress.loopIndex + 1}`
-      : null
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -1887,7 +2130,16 @@ function SendListPanel({ session }: { session: SessionProfile }) {
         <Button size="icon" variant="outline" className="size-8 shrink-0" onClick={exportDsl} title={t("Export DSL")}>
           <Download className="size-3.5" />
         </Button>
-        <Button size="icon" variant="outline" className="size-8 shrink-0" onClick={() => { setDslText(""); setDslOpen(true) }} title={t("Import DSL")}>
+        <Button
+          size="icon"
+          variant="outline"
+          className="size-8 shrink-0"
+          onClick={() => {
+            setDslText("")
+            setDslOpen(true)
+          }}
+          title={t("Import DSL")}
+        >
           <Upload className="size-3.5" />
         </Button>
         <AlertDialog open={deleteConfirm} onOpenChange={setDeleteConfirm}>
@@ -1926,7 +2178,13 @@ function SendListPanel({ session }: { session: SessionProfile }) {
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-muted-foreground">{t("Send list commands")}</span>
-          <Button size="sm" variant="ghost" className="h-6 gap-1 text-xs" onClick={addCmd} disabled={running}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 gap-1 text-xs"
+            onClick={() => openCmdDialog()}
+            disabled={running}
+          >
             <Plus className="size-3" />
             {t("Add command")}
           </Button>
@@ -1935,48 +2193,35 @@ function SendListPanel({ session }: { session: SessionProfile }) {
           {list.commands.length ? (
             <div className="divide-y divide-border/50">
               {list.commands.map((cmd) => (
-                <div key={cmd.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-1 px-2 py-1">
-                  <Input
-                    className="h-7 min-w-0 border-0 bg-transparent px-1 text-xs font-mono shadow-none focus-visible:ring-0"
-                    value={cmd.command}
-                    onChange={(e) => updateCmd(cmd.id, { command: e.target.value })}
-                    placeholder="AT+RST"
-                    disabled={running}
-                  />
-                  <div className="flex items-center gap-0.5">
-                    <Input
-                      type="number"
-                      min={0}
-                      className="h-7 w-9 border-0 bg-transparent px-0 text-center text-[10px] tabular-nums shadow-none focus-visible:ring-0"
-                      value={cmd.loopCount}
-                      onChange={(e) => updateCmd(cmd.id, { loopCount: Math.max(0, Number(e.target.value) || 0) })}
-                      title={t("Loop count")}
+                <div key={cmd.id} className="px-2 py-2">
+                  <div className="flex items-start gap-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-xs">{cmd.command || "—"}</div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        {formatSendListCommandMeta(cmd, t)}
+                      </div>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 shrink-0"
+                      onClick={() => openCmdDialog(cmd)}
                       disabled={running}
-                    />
-                    <span className="text-[10px] text-muted-foreground">×</span>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    <Input
-                      type="number"
-                      min={10}
-                      step={10}
-                      className="h-7 w-12 border-0 bg-transparent px-0 text-center text-[10px] tabular-nums shadow-none focus-visible:ring-0"
-                      value={cmd.intervalMs}
-                      onChange={(e) => updateCmd(cmd.id, { intervalMs: Math.max(10, Number(e.target.value) || 10) })}
-                      title={t("Interval")}
+                      aria-label={t("Edit list command")}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 shrink-0"
+                      onClick={() => deleteCmd(cmd.id)}
                       disabled={running}
-                    />
-                    <span className="text-[10px] text-muted-foreground">ms</span>
+                      aria-label={t("Remove")}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-6 shrink-0"
-                    onClick={() => deleteCmd(cmd.id)}
-                    disabled={running}
-                  >
-                    <Trash2 className="size-3" />
-                  </Button>
                 </div>
               ))}
             </div>
@@ -1993,27 +2238,29 @@ function SendListPanel({ session }: { session: SessionProfile }) {
       <Separator />
 
       <div className="grid grid-cols-2 gap-2">
-        <Select value={list.suffix} onValueChange={(v) => updateList({ suffix: v as LineSuffix })} disabled={running}>
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(suffixLabel).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {t(label)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={list.mode} onValueChange={(v) => updateList({ mode: v as DisplayMode })} disabled={running}>
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ascii">ASCII</SelectItem>
-            <SelectItem value="hex">HEX</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="grid gap-1">
+          <label className="text-[10px] text-muted-foreground">{t("List repeat")}</label>
+          <Input
+            type="number"
+            min={0}
+            className="h-8 text-xs"
+            value={list.listLoop}
+            onChange={(e) => updateList({ listLoop: Math.max(0, Number(e.target.value) || 0) })}
+            disabled={running}
+          />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-[10px] text-muted-foreground">{t("Cmd gap")}</label>
+          <Input
+            type="number"
+            min={10}
+            step={10}
+            className="h-8 text-xs"
+            value={list.listIntervalMs}
+            onChange={(e) => updateList({ listIntervalMs: Math.max(10, Number(e.target.value) || 10) })}
+            disabled={running}
+          />
+        </div>
       </div>
 
       {progressText ? (
@@ -2066,6 +2313,8 @@ function SendListPanel({ session }: { session: SessionProfile }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {cmdDialog}
     </div>
   )
 }
@@ -2074,48 +2323,89 @@ function Inspector({ session }: { session: SessionProfile }) {
   const t = useT()
   const inspectorTab = usePrettyComStore((state) => state.inspectorTab)
   const setInspectorTab = usePrettyComStore((state) => state.setInspectorTab)
+  const { state: sidebarState } = useSidebar()
+  const collapsed = sidebarState === "collapsed"
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-l border-border/50 bg-card/45">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/70 px-4">
-        <div>
-          <div className="text-sm font-medium">{t("Inspector")}</div>
-          <div className="text-xs text-muted-foreground">
-            {t("Selected frame")} · {session.path}
-          </div>
+    <Sidebar
+      side="right"
+      collapsible="icon"
+      variant="sidebar"
+      className="top-12 h-[calc(100svh-3rem)] border-border/50 bg-card"
+      data-testid="inspector-panel"
+    >
+      <SidebarHeader className="h-12 border-b border-border/70 px-3 py-0">
+        <div className="flex h-12 items-center gap-2 group-data-[collapsible=icon]:justify-center">
+          {!collapsed ? (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{t("Tools panel")}</div>
+              <div className="truncate text-xs text-muted-foreground">{session.path}</div>
+            </div>
+          ) : (
+            <PanelRight className="size-4 text-muted-foreground" />
+          )}
         </div>
-        <Button variant="ghost" size="icon" aria-label={t("Pin inspector")}>
-          <PanelRight className="size-4" />
-        </Button>
-      </div>
-      <Tabs value={inspectorTab} onValueChange={setInspectorTab} className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-border/70 px-3 py-2">
-          <TabsList className="grid h-8 w-full grid-cols-3">
-            <TabsTrigger value="commands" data-testid="inspector-tab-commands">{t("Commands")}</TabsTrigger>
-            <TabsTrigger value="sendlist" data-testid="inspector-tab-sendlist">{t("Send List")}</TabsTrigger>
-            <TabsTrigger value="port" data-testid="inspector-tab-port">{t("Port")}</TabsTrigger>
-          </TabsList>
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <TabsContent value="commands" className="m-0 space-y-3 p-3">
-            <CommandsPanel />
-          </TabsContent>
-          <TabsContent value="sendlist" className="m-0 h-full p-3">
-            <SendListPanel session={session} />
-          </TabsContent>
-          <TabsContent value="port" className="m-0 space-y-3 p-3">
-            <PortDetails session={session} />
-          </TabsContent>
-        </ScrollArea>
-      </Tabs>
-    </aside>
+      </SidebarHeader>
+      {collapsed ? (
+        <SidebarContent className="px-1 py-2">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={inspectorTab === "commands"}
+                tooltip={t("Commands")}
+                onClick={() => setInspectorTab("commands")}
+                data-testid="inspector-tab-commands"
+              >
+                <Bolt className="size-4" />
+                <span>{t("Commands")}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={inspectorTab === "sendlist"}
+                tooltip={t("List send")}
+                onClick={() => setInspectorTab("sendlist")}
+                data-testid="inspector-tab-sendlist"
+              >
+                <ListOrdered className="size-4" />
+                <span>{t("List send")}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarContent>
+      ) : (
+        <SidebarContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+          <Tabs value={inspectorTab} onValueChange={setInspectorTab} className="flex min-h-0 flex-1 flex-col">
+            <div className="border-b border-border/70 px-3 py-2">
+              <TabsList className="grid h-8 w-full grid-cols-2">
+                <TabsTrigger value="commands" data-testid="inspector-tab-commands">
+                  {t("Commands")}
+                </TabsTrigger>
+                <TabsTrigger value="sendlist" data-testid="inspector-tab-sendlist">
+                  {t("List send")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <ScrollArea className="min-h-0 flex-1">
+              <TabsContent value="commands" className="m-0 space-y-3 p-3">
+                <CommandsPanel />
+              </TabsContent>
+              <TabsContent value="sendlist" className="m-0 h-full p-3">
+                <SendListPanel session={session} />
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+        </SidebarContent>
+      )}
+      <SidebarRail label={t("Toggle tools panel")} />
+    </Sidebar>
   )
 }
 
 function CommandsPanel() {
   const t = useT()
   const setCommandText = usePrettyComStore((state) => state.setCommandText)
-  const setDisplayMode = usePrettyComStore((state) => state.setDisplayMode)
+  const setSendDisplayMode = usePrettyComStore((state) => state.setSendDisplayMode)
   const setSuffix = usePrettyComStore((state) => state.setSuffix)
   const aliases = usePrettyComStore((state) => state.aliases)
   const addAlias = usePrettyComStore((state) => state.addAlias)
@@ -2171,7 +2461,7 @@ function CommandsPanel() {
 
   const insertAlias = (alias: Alias) => {
     setCommandText(alias.command)
-    setDisplayMode(alias.mode)
+    setSendDisplayMode(alias.mode)
     setSuffix(alias.suffix)
   }
 
@@ -2266,7 +2556,7 @@ function CommandsPanel() {
                     className="min-w-0 text-left"
                     onClick={() => {
                       setCommandText(entry.command)
-                      setDisplayMode(entry.mode)
+                      setSendDisplayMode(entry.mode)
                       setSuffix(entry.suffix)
                     }}
                   >
@@ -2346,154 +2636,6 @@ function CommandsPanel() {
   )
 }
 
-function PortDetails({ session }: { session: SessionProfile }) {
-  const t = useT()
-  const flowLabel =
-    session.config.flowControl === "none"
-      ? t("None")
-      : session.config.flowControl === "hardware"
-        ? t("Hardware")
-        : t("Software")
-  const parityLabel =
-    session.config.parity === "none" ? t("None") : session.config.parity === "odd" ? t("Odd") : t("Even")
-
-  return (
-    <div className="space-y-3">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t("Port profile")}</CardTitle>
-          <CardDescription>
-            {session.path} {t("connection parameters")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          <Detail label={t("Baud rate")} value={`${session.config.baudRate}`} icon={Gauge} />
-          <Detail label={t("Data bits")} value={`${session.config.dataBits}`} icon={Layers3} />
-          <Detail label={t("Parity")} value={parityLabel} icon={CircleOff} />
-          <Detail label={t("Stop bits")} value={`${session.config.stopBits}`} icon={Unplug} />
-          <Detail label={t("Flow control")} value={flowLabel} icon={Bolt} />
-          <Detail
-            label={t("Type")}
-            value={session.status === "connected" ? t("Connected") : session.status === "error" ? t("Error") : t("Disconnected")}
-            icon={PlugZap}
-          />
-        </CardContent>
-      </Card>
-      <Skeleton className="h-24 rounded-lg" />
-    </div>
-  )
-}
-
-function GlobalCommand({ onOpenPort }: { onOpenPort: () => void }) {
-  const t = useT()
-  const commandOpen = usePrettyComStore((state) => state.commandOpen)
-  const setCommandOpen = usePrettyComStore((state) => state.setCommandOpen)
-  const setSettingsOpen = usePrettyComStore((state) => state.setSettingsOpen)
-  const setDisplayMode = usePrettyComStore((state) => state.setDisplayMode)
-  const setCommandText = usePrettyComStore((state) => state.setCommandText)
-  const setSuffix = usePrettyComStore((state) => state.setSuffix)
-  const aliases = usePrettyComStore((state) => state.aliases)
-  const currentSession = usePrettyComStore((state) => state.getCurrentSession())
-
-  const insertAliasFromPalette = (alias: { command: string; mode: DisplayMode; suffix: LineSuffix }) => {
-    setCommandText(alias.command)
-    setDisplayMode(alias.mode)
-    setSuffix(alias.suffix)
-    setCommandOpen(false)
-  }
-
-  const handleExport = async () => {
-    if (!currentSession?.logs.length) {
-      setCommandOpen(false)
-      return
-    }
-    try {
-      const path = await save({
-        defaultPath: `${currentSession.name}-log.csv`,
-        filters: [{ name: "CSV", extensions: ["csv"] }],
-      })
-      if (path) {
-        await writeTextFile(path, formatLogsForCsv(currentSession.logs))
-      }
-    } catch {
-      window.alert(t("Export failed"))
-    }
-    setCommandOpen(false)
-  }
-
-  return (
-    <CommandDialog
-      open={commandOpen}
-      onOpenChange={setCommandOpen}
-      title={t("PrettyCOM command palette")}
-      description={t("Run serial actions")}
-      className="max-w-2xl"
-      data-testid="command-palette"
-    >
-      <Command>
-        <CommandInput placeholder={t("Open port, insert quick command, switch view...")} />
-        <CommandList>
-          <CommandEmpty>{t("No command found.")}</CommandEmpty>
-          <CommandGroup heading={t("Serial")}>
-            <CommandItem
-              onSelect={() => {
-                setCommandOpen(false)
-                onOpenPort()
-              }}
-            >
-              <PlugZap className="size-4" />
-              {t("Open COM port")}
-              <CommandShortcut>Enter</CommandShortcut>
-            </CommandItem>
-            <CommandItem
-              onSelect={() => {
-                void listPorts()
-                setCommandOpen(false)
-              }}
-            >
-              <RadioTower className="size-4" />
-              {t("Rescan ports")}
-            </CommandItem>
-            <CommandItem onSelect={() => setDisplayMode("hex")}>
-              <Braces className="size-4" />
-              {t("Switch log to HEX")}
-            </CommandItem>
-          </CommandGroup>
-          {aliases.length ? (
-            <>
-              <CommandSeparator />
-              <CommandGroup heading={t("Quick commands")}>
-                {aliases.map((alias) => (
-                  <CommandItem key={alias.id} onSelect={() => insertAliasFromPalette(alias)}>
-                    <Play className="size-4" />
-                    {t("Insert")} {t(alias.name)}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </>
-          ) : null}
-          <CommandSeparator />
-          <CommandGroup heading={t("Workspace")}>
-            <CommandItem
-              onSelect={() => {
-                setCommandOpen(false)
-                setSettingsOpen(true)
-              }}
-            >
-              <Settings className="size-4" />
-              {t("Open settings")}
-            </CommandItem>
-            <CommandItem onSelect={() => void handleExport()}>
-              <Download className="size-4" />
-              {t("Export current log")}
-            </CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>
-    </CommandDialog>
-  )
-}
-
 function SettingsSheet({
   open,
   onOpenChange,
@@ -2518,30 +2660,28 @@ function SettingsSheet({
           <SheetTitle>{t("Settings")}</SheetTitle>
           <SheetDescription>{t("Workspace preferences and serial defaults.")}</SheetDescription>
         </SheetHeader>
-        <div className="mt-6 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{t("Language")}</CardTitle>
-              <CardDescription>{t("Interface language")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-                <SelectTrigger data-testid="language-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="zh-CN">简体中文</SelectItem>
-                  <SelectItem value="en-US">English</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{t("Log retention limit")}</CardTitle>
-              <CardDescription>{t("Max log entries per session")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
+        <div className="mt-6 overflow-hidden rounded-lg border border-border">
+          <div className="grid grid-cols-[1fr_1fr] items-center gap-4 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-sm font-medium">{t("Language")}</div>
+              <div className="text-xs text-muted-foreground">{t("Interface language")}</div>
+            </div>
+            <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+              <SelectTrigger data-testid="language-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="zh-CN">简体中文</SelectItem>
+                <SelectItem value="en-US">English</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr] items-start gap-4 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-sm font-medium">{t("Log retention limit")}</div>
+              <div className="text-xs text-muted-foreground">{t("Max log entries per session")}</div>
+            </div>
+            <div className="space-y-2">
               <Input
                 type="number"
                 min={500}
@@ -2561,66 +2701,44 @@ function SettingsSheet({
                   "Oldest log entries are dropped when the limit is exceeded. Saved to local storage with sessions and highlight rules."
                 )}
               </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{t("Appearance")}</CardTitle>
-              <CardDescription>{t("Choose light or dark interface theme.")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
-                <SelectTrigger data-testid="theme-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dark">{t("Dark theme")}</SelectItem>
-                  <SelectItem value="light">{t("Light theme")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{t("Default suffix")}</CardTitle>
-              <CardDescription>{t("Applied when sending ASCII commands.")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select value={suffix} onValueChange={(value) => setSuffix(value as LineSuffix)}>
-                <SelectTrigger data-testid="default-suffix-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(suffixLabel).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {t(label)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr] items-center gap-4 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-sm font-medium">{t("Appearance")}</div>
+              <div className="text-xs text-muted-foreground">{t("Choose light or dark interface theme.")}</div>
+            </div>
+            <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+              <SelectTrigger data-testid="theme-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dark">{t("Dark theme")}</SelectItem>
+                <SelectItem value="light">{t("Light theme")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr] items-center gap-4 px-4 py-3">
+            <div>
+              <div className="text-sm font-medium">{t("Default suffix")}</div>
+              <div className="text-xs text-muted-foreground">{t("Applied when sending ASCII commands.")}</div>
+            </div>
+            <Select value={suffix} onValueChange={(value) => setSuffix(value as LineSuffix)}>
+              <SelectTrigger data-testid="default-suffix-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(suffixLabel).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {t(label)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
-  )
-}
-
-function Detail({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  icon: typeof Gauge
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border/70 p-2 text-sm">
-      <Icon className="size-4 text-muted-foreground" />
-      <span className="text-muted-foreground">{label}</span>
-      <span className="ml-auto font-mono">{value}</span>
-    </div>
   )
 }
 

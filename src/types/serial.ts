@@ -80,6 +80,8 @@ export interface SendListCommand {
   command: string
   loopCount: number
   intervalMs: number
+  suffix: LineSuffix
+  mode: DisplayMode
 }
 
 export interface SendList {

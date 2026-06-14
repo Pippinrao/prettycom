@@ -28,6 +28,9 @@
   --success: oklch(0.72 0.17 150);
   --warning: oklch(0.8 0.17 75);
   --info: oklch(0.72 0.17 210);
+  --log-rx: oklch(0.52 0.14 240);
+  --log-tx: oklch(0.48 0.14 150);
+  --log-sys: oklch(0.55 0.06 75);
   --radius: 0.625rem;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -67,6 +70,9 @@
   --success: oklch(0.72 0.17 150);
   --warning: oklch(0.8 0.17 75);
   --info: oklch(0.72 0.17 210);
+  --log-rx: oklch(0.72 0.17 210);
+  --log-tx: oklch(0.72 0.17 150);
+  --log-sys: oklch(0.75 0.08 75);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -105,6 +111,9 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-log-rx: var(--log-rx);
+  --color-log-tx: var(--log-tx);
+  --color-log-sys: var(--log-sys);
   --font-sans: 'Geist Variable', sans-serif;
   --font-mono: "Geist Mono", "SF Mono", ui-monospace, monospace;
   --radius-xs: calc(var(--radius) * 0.5);

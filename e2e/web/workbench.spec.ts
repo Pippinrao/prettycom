@@ -12,6 +12,7 @@ test.beforeEach(async ({ page }) => {
 test("default session and inspector commands tab", async ({ page }) => {
   await expect(page.getByTestId("session-item-test-default")).toBeVisible()
   await expect(page.getByTestId("inspector-tab-commands")).toBeVisible()
+  await expect(page.getByTestId("inspector-tab-sendlist")).toContainText(/List send|列表发送/i)
 })
 
 /** @fc F02 */
@@ -47,8 +48,9 @@ test("send disabled when disconnected", async ({ page }) => {
 })
 
 /** @fc F01 */
-test("remove last session from sidebar and context menu", async ({ page }) => {
-  await page.getByTestId("sidebar-remove-session").click()
+test("remove last session from sidebar inline delete", async ({ page }) => {
+  await page.getByTestId("session-item-test-default").hover()
+  await page.getByTestId("session-row-delete-test-default").click({ force: true })
   await page.getByRole("button", { name: /移除|Remove/i }).last().click()
   await expect(page.getByTestId("session-item-test-default")).toHaveCount(0)
   await expect(page.getByText(/打开串口开始|Open a port to start/i)).toBeVisible()
@@ -62,7 +64,9 @@ test("log search filter", async ({ page }) => {
   await page.keyboard.type("HELLO")
   await page.getByTestId("send-command").click()
   await page.getByTestId("log-search").fill("HELLO")
+  await page.getByTestId("log-more-menu").click()
   await expect(page.getByTestId("log-filter-count")).toBeVisible()
+  await page.keyboard.press("Escape")
   await page.getByTestId("log-search").fill("NOMATCH_FILTER_XYZ")
   await expect(page.getByTestId("log-search")).toBeVisible()
   await expect(page.getByTestId("log-filter-empty")).toBeVisible()
@@ -70,10 +74,13 @@ test("log search filter", async ({ page }) => {
 
 /** @fc F10 */
 test("auto-scroll toggle", async ({ page }) => {
+  await page.getByTestId("dev-sample-btn").click()
   const toggle = page.getByTestId("auto-scroll-toggle")
   await expect(toggle).toHaveAttribute("aria-pressed", "true")
+  await expect(toggle).toHaveClass(/bg-primary\/15/)
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-pressed", "false")
+  await expect(toggle).not.toHaveClass(/bg-primary\/15/)
 })
 
 /** @fc F13 */
@@ -97,7 +104,8 @@ test("export logs when connected with data", async ({ page }) => {
   await editor.click()
   await page.keyboard.type("EXPORT_ME")
   await page.getByTestId("send-command").click()
-  await page.getByRole("button", { name: /导出日志|Export Logs/i }).first().click()
+  await page.getByTestId("log-more-menu").click()
+  await page.getByRole("menuitem", { name: /导出日志|Export Logs/i }).click()
   const count = await page.evaluate(() => window.__prettycomWrittenFiles?.size ?? 0)
   expect(count).toBeGreaterThan(0)
 })

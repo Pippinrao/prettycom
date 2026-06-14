@@ -20,13 +20,16 @@
 | F14 | 别名 CRUD | store.test | - | - | |
 | F15 | 最近命令历史 | store.test | - | - | |
 | F16 | 语言切换 | i18n.test | Y | - | zh-CN ↔ en-US |
-| F17 | 命令面板 | - | Y | - | Ctrl+K |
-| F18 | HEX 发送 | defaults.test | scaffold | 环回 | Desktop 脚手架占位 |
+| F17 | 命令面板 | N/A | N/A | - | 已移除；快捷命令保留在检查器 |
+| F18 | HEX 发送 | defaults.test | Y | 环回 | 发送格式与日志格式独立 |
 | F19 | 高亮规则列表 | log-highlight.test | Y | - | 关键词/正则/颜色、无效正则保护、测试预览与定位到日志 |
 | F20 | 日志表头筛选布局 | - | Y | - | 搜索、方向、高亮入口位于日志表头 |
 | F21 | 侧栏收起不遮挡 | - | Y | - | 收起后主区左移 |
 | F22 | 打开串口主按钮 | - | Y | - | open-port-btn + 连接语义 |
 | F25 | RX 终端/逐帧显示 | rx-coalesce.test | Y | - | 终端合并至换行；逐帧每包一行 |
+| F26 | 状态栏 StatusBar | - | Y | - | 有日志时显示 RX/TX/条数/自动滚动 |
+| F27 | 日志行右键菜单 | - | Y | - | 复制载荷/HEX/删除 |
+| F28 | Ctrl+L 聚焦日志搜索 | - | Y | - | 快捷键聚焦 log-search |
 | F23 | 进程退出释放串口 | lib.rs unit | 手工 | - | 关闭窗口后外部进程可重新打开端口；**禁止**自动化依赖 COM5/STM32 |
 | F24 | 非 Tauri Web 预览保护 | serial.test | 手工/截图 | - | 无 Tauri runtime 时不注册 event bridge，避免白屏 |
 | - | Frame/Parse 解析 | N/A | N/A | N/A | 占位 UI，不测 |

@@ -44,12 +44,12 @@ test("switch between multiple sessions", async ({ page }) => {
 test("remove one session while another remains", async ({ page }) => {
   await openPortDialogAndConnect(page, { name: "Bench B" })
   const secondSession = page.locator('[data-testid^="session-item-"]').filter({ hasText: "Bench B" })
-  await secondSession.click({ button: "right" })
-  await page.getByRole("menuitem", { name: /Remove session|移除会话/ }).click()
+  await page.getByTestId("session-item-test-default").hover()
+  await page.getByTestId("session-row-delete-test-default").click({ force: true })
   await page.getByRole("button", { name: /^Remove$|^移除$/ }).click()
 
-  await expect(secondSession).toHaveCount(0)
-  await expect(page.getByTestId("session-item-test-default")).toBeVisible()
+  await expect(page.getByTestId("session-item-test-default")).toHaveCount(0)
+  await expect(secondSession).toBeVisible()
 })
 
 /** @fc F09 */
@@ -71,16 +71,10 @@ test("clear log history for current session", async ({ page }) => {
   await sendAsciiCommand(page, "CLEAR_ME")
   await expect(page.getByTestId("log-stream")).toContainText("CLEAR_ME")
 
+  await page.getByTestId("log-more-menu").click()
   await page.getByTestId("clear-logs-btn").click()
   await page.getByTestId("clear-logs-confirm").click()
   await expect(page.getByText(/No serial history|暂无串口历史/)).toBeVisible()
-})
-
-/** @fc F17 */
-test("command palette opens with Ctrl+K", async ({ page }) => {
-  await page.keyboard.press("Control+k")
-  await expect(page.getByRole("dialog")).toBeVisible()
-  await expect(page.getByRole("dialog").getByText(/Open COM port|打开 COM 串口/)).toBeVisible()
 })
 
 /** @fc F20 */
@@ -89,7 +83,7 @@ test("log table header keeps filter controls visible", async ({ page }) => {
   await expect(page.getByTestId("log-search")).toBeVisible()
   await expect(page.getByTestId("log-filter-direction")).toBeVisible()
   await expect(page.getByTestId("highlight-rules-open")).toBeVisible()
-  await expect(page.getByTestId("log-filter-count")).toBeVisible()
+  await expect(page.getByTestId("log-more-menu")).toBeVisible()
 
   await page.getByTestId("log-search").fill("NOMATCH_FILTER_XYZ")
   await expect(page.getByTestId("log-filter-empty")).toBeVisible()
@@ -135,4 +129,43 @@ test("frame mode keeps each RX chunk on its own row", async ({ page }) => {
 
   await expect(page.locator("[data-log-row=true]").filter({ hasText: "ZZFRAME_A" })).toHaveCount(1)
   await expect(page.locator("[data-log-row=true]").filter({ hasText: "ZZFRAME_B" })).toHaveCount(1)
+})
+
+/** @fc F26 */
+test("status bar appears with logs and hides when cleared", async ({ page }) => {
+  await expect(page.getByTestId("status-bar")).toHaveCount(0)
+
+  await page.getByTestId("dev-sample-btn").click()
+  const statusBar = page.getByTestId("status-bar")
+  await expect(statusBar).toBeVisible()
+  await expect(statusBar).toContainText(/RX/)
+  await expect(statusBar).toContainText(/TX/)
+  await expect(statusBar).toContainText(/log entries|条日志/)
+
+  await page.getByTestId("log-more-menu").click()
+  await page.getByTestId("clear-logs-btn").click()
+  await page.getByTestId("clear-logs-confirm").click()
+  await expect(page.getByTestId("status-bar")).toHaveCount(0)
+})
+
+/** @fc F27 */
+test("log row context menu exposes copy and delete actions", async ({ page }) => {
+  await page.getByTestId("dev-sample-btn").click()
+  const firstRow = page.locator("[data-log-row=true]").first()
+  await expect(firstRow).toBeVisible()
+
+  await firstRow.click({ button: "right" })
+  await expect(page.getByTestId("log-row-copy-payload")).toBeVisible()
+  await expect(page.getByTestId("log-row-copy-hex")).toBeVisible()
+  await expect(page.getByTestId("log-row-delete")).toBeVisible()
+})
+
+/** @fc F28 */
+test("Ctrl+L focuses log search when logs are visible", async ({ page }) => {
+  await page.getByTestId("dev-sample-btn").click()
+  await expect(page.getByTestId("log-search")).toBeVisible()
+
+  await page.getByTestId("command-input").click()
+  await page.keyboard.press("Control+l")
+  await expect(page.getByTestId("log-search")).toBeFocused()
 })

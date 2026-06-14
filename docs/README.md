@@ -7,15 +7,23 @@
 1. 根目录 [README.md](../README.md)
 2. [AGENTS.md](../AGENTS.md)
 3. [product/ui-interaction-requirements.md](product/ui-interaction-requirements.md)
-4. [testing/feature-coverage-matrix.md](testing/feature-coverage-matrix.md)
-5. [testing/virtual-serial-setup.md](testing/virtual-serial-setup.md)
+4. [dev/themes.md](dev/themes.md)（主题模块架构与踩坑）
+5. [testing/feature-coverage-matrix.md](testing/feature-coverage-matrix.md)
+6. [testing/virtual-serial-setup.md](testing/virtual-serial-setup.md)
 
 ## 子目录说明
 
 | 目录 | 内容 |
 | --- | --- |
 | [product/](product/) | UI 交互与行为约束 |
+| [dev/](dev/) | 主题模块等开发指南与踩坑 |
 | [testing/](testing/) | FCM、虚拟串口与 E2E |
+
+## Agent 项目 Skill
+
+| Skill | 路径 | 用途 |
+| --- | --- | --- |
+| prettycom-themes | [.cursor/skills/prettycom-themes/SKILL.md](../.cursor/skills/prettycom-themes/SKILL.md) | 修改/扩展主题、吉祥物、装饰动画 |
 
 ## 相关脚本
 

@@ -4,11 +4,16 @@ import {
   applySuffix,
   bytesToAscii,
   bytesToHex,
+  createDefaultAliases,
   createRxLogEntry,
   createSysLogEntry,
   createTxLogEntry,
   formatLogsForExport,
+  parseAliasesDsl,
   parseHexString,
+  parseSendListDsl,
+  serializeAliases,
+  serializeSendList,
 } from "@/data/serial-defaults"
 
 describe("serial-defaults", () => {
@@ -71,5 +76,91 @@ describe("serial-defaults", () => {
     ])
     expect(text).toContain("time,direction,level,ascii,hex,bytes,delta_ms")
     expect(text).toContain("12:00:00.000,TX,success,hi,68 69,2,0")
+  })
+
+  it("serializeAliases and parseAliasesDsl round-trip default aliases", () => {
+    const aliases = createDefaultAliases()
+    const dsl = serializeAliases(aliases)
+    expect(dsl).toContain("@label:Reset AT+RST")
+    expect(dsl).toContain("@listloop:1")
+    const parsed = parseAliasesDsl(dsl)
+    expect(parsed.name).toBe("Quick Commands")
+    expect(parsed.aliases).toHaveLength(4)
+    expect(parsed.aliases[0].name).toBe("Reset")
+    expect(parsed.aliases[0].command).toBe("AT+RST")
+    expect(parsed.aliases[3].command).toBe("BOOT 0x1000")
+  })
+
+  it("parseAliasesDsl works without @name header", () => {
+    const dsl = [
+      "@suffix:crlf",
+      "@mode:ascii",
+      "---",
+      "@label:Ping AT @loop:1 @interval:500",
+    ].join("\n")
+    const parsed = parseAliasesDsl(dsl)
+    expect(parsed.name).toBe("")
+    expect(parsed.aliases).toHaveLength(1)
+    expect(parsed.aliases[0].name).toBe("Ping")
+    expect(parsed.aliases[0].command).toBe("AT")
+  })
+
+  it("parseAliasesDsl handles @label with spaced command and per-item suffix", () => {
+    const dsl = [
+      "@name:Team Shortcuts",
+      "@suffix:crlf",
+      "@mode:ascii",
+      "---",
+      "@label:Bootloader BOOT 0x1000 @suffix:lf",
+    ].join("\n")
+    const parsed = parseAliasesDsl(dsl)
+    expect(parsed.aliases).toHaveLength(1)
+    expect(parsed.aliases[0].name).toBe("Bootloader")
+    expect(parsed.aliases[0].command).toBe("BOOT 0x1000")
+    expect(parsed.aliases[0].suffix).toBe("lf")
+  })
+
+  it("parseSendListDsl strips @label from command lines", () => {
+    const dsl = [
+      "@name:Test",
+      "@listloop:1",
+      "@listinterval:500",
+      "@suffix:crlf",
+      "@mode:ascii",
+      "---",
+      "@label:Reset AT+RST @loop:1 @interval:500",
+    ].join("\n")
+    const parsed = parseSendListDsl(dsl)
+    expect(parsed.commands).toHaveLength(1)
+    expect(parsed.commands[0].command).toBe("AT+RST")
+  })
+
+  it("serializeSendList and parseSendListDsl round-trip", () => {
+    const list = {
+      id: "l1",
+      name: "My List",
+      commands: [
+        {
+          id: "c1",
+          command: "AT+GMR",
+          loopCount: 2,
+          intervalMs: 100,
+          suffix: "crlf" as const,
+          mode: "ascii" as const,
+        },
+      ],
+      listLoop: 3,
+      listIntervalMs: 250,
+      suffix: "crlf" as const,
+      mode: "ascii" as const,
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    const parsed = parseSendListDsl(serializeSendList(list))
+    expect(parsed.name).toBe("My List")
+    expect(parsed.listLoop).toBe(3)
+    expect(parsed.listIntervalMs).toBe(250)
+    expect(parsed.commands[0].command).toBe("AT+GMR")
+    expect(parsed.commands[0].loopCount).toBe(2)
   })
 })

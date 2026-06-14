@@ -1,5 +1,5 @@
 export type Language = "zh-CN" | "en-US"
-export type Theme = "dark" | "light"
+export type Theme = "dark" | "light" | "pink" | "anime" | "cyber"
 export type DisplayMode = "ascii" | "hex"
 /** Terminal: merge RX into lines until LF. Frame: one USB read per log row. */
 export type RxDisplayMode = "terminal" | "frame"

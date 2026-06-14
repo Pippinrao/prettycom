@@ -148,8 +148,21 @@ test("status bar appears with logs and hides when cleared", async ({ page }) => 
   await expect(page.getByTestId("status-bar")).toHaveCount(0)
 })
 
+/** @fc F15 */
+test("recent commands appear after send and can be cleared", async ({ page }) => {
+  await page.getByTestId("session-connect-toggle").click()
+  const editor = page.locator("[data-testid=command-input] .cm-content")
+  await editor.click()
+  await page.keyboard.type("RECENT_CMD_TEST")
+  await page.getByTestId("send-command").click()
+  await expect(page.locator('[data-testid^="history-item-"]').first()).toContainText("RECENT_CMD_TEST")
+
+  await page.getByTestId("inspector-panel").getByRole("button", { name: /^Clear$|^清空$/ }).click()
+  await expect(page.locator('[data-testid^="history-item-"]')).toHaveCount(0)
+})
+
 /** @fc F27 */
-test("log row context menu exposes copy and delete actions", async ({ page }) => {
+test("log row context menu exposes copy actions without delete", async ({ page }) => {
   await page.getByTestId("dev-sample-btn").click()
   const firstRow = page.locator("[data-log-row=true]").first()
   await expect(firstRow).toBeVisible()
@@ -157,7 +170,7 @@ test("log row context menu exposes copy and delete actions", async ({ page }) =>
   await firstRow.click({ button: "right" })
   await expect(page.getByTestId("log-row-copy-payload")).toBeVisible()
   await expect(page.getByTestId("log-row-copy-hex")).toBeVisible()
-  await expect(page.getByTestId("log-row-delete")).toBeVisible()
+  await expect(page.getByTestId("log-row-delete")).toHaveCount(0)
 })
 
 /** @fc F28 */

@@ -67,7 +67,7 @@
 
 - 日志列表必须保留虚拟滚动能力，避免大量日志导致渲染卡顿。
 - 行布局应稳定，列宽变化不能导致行高抖动。
-- 选中行、RX/TX/SYS 方向色、删除按钮 hover 态都应保持可辨识。
+- 选中行、RX/TX/SYS 方向色应保持可辨识。
 - 筛选后必须显示可见条数/总条数，便于确认筛选范围。
 - RX/TX/SYS 方向色使用语义 token（`log-rx` / `log-tx` / `log-sys`），深浅主题均须可辨识；禁止在行样式中硬编码 `sky-*` / `emerald-*` 等 Tailwind 色板类名。
 
@@ -81,8 +81,8 @@
 ## 日志行右键菜单
 
 - 每条日志行支持右键上下文菜单（`ContextMenu`）。
-- 菜单项：**复制载荷**（当前日志显示模式下的 payload）、**复制 HEX**（原始 hex 字段）、**删除日志记录**（与行内删除按钮等价）。
-- 以下 `data-testid` 须保持稳定：`log-row-copy-payload`、`log-row-copy-hex`、`log-row-delete`（菜单项）。
+- 菜单项：**复制载荷**（当前日志显示模式下的 payload）、**复制 HEX**（原始 hex 字段）。
+- 以下 `data-testid` 须保持稳定：`log-row-copy-payload`、`log-row-copy-hex`。
 
 ## 键盘快捷键
 
@@ -110,10 +110,23 @@
 - **发送选项**（`send-options-trigger`）DropdownMenu 收纳后缀（`send-suffix-*`）与发送格式（`send-format-*`）；触发器摘要展示当前 `CRLF · ASCII` 类文案。
 - **Mod+Enter** 提示通过发送按钮 Tooltip 展示，不占第二行。
 - **不提供循环发送**：底部命令区仅支持单次发送；带循环与间隔的批量发送统一在工具面板「列表发送」标签中配置（见下文）。
-- 编辑器主题须跟随设置中的 `theme`（浅色/深色），不得硬编码为 dark。
+- 编辑器主题须跟随设置中的 `theme`（通过 `getCodeMirrorTheme()` 映射为 CodeMirror 浅色/深色），不得硬编码为 dark。
 - 多行输入下 **Mod-Enter**（Ctrl/Cmd+Enter）发送命令；普通 Enter 仍用于换行。
 - 快捷命令与最近命令历史仅在工具面板「常用命令」标签维护。
 - 以下 `data-testid` 须保持稳定，供 E2E 与自动化使用：`command-input`、`send-options-trigger`、`send-suffix-*`、`send-format-*`、`send-command`。
+
+## 主题模块与装饰动画
+
+- 主题以可插拔模块维护于 `src/themes/`：`registry` 定义 meta，`applyTheme()` 是唯一修改 `<html data-theme>` 与 `.dark` 的入口。开发细节与踩坑见 [主题模块开发指南](../dev/themes.md)。
+- 可用主题 ID：`light`、`dark`、`pink`、`anime`（霓虹）、`cyber`（赛博）；业务层（串口、日志、发送）**禁止** `if (theme)` 分支。
+- 设置面板 `ThemeAppearanceSection` + `ThemeCardGrid`（2 列卡片）提供五主题；容器保留 `data-testid="theme-select"`，各卡 `data-testid="theme-card-{id}"`（如 `theme-card-anime`、`theme-card-cyber`）。
+- 装饰组件：`ThemeEmptyIllustration`（日志空状态）、`ThemeCompanionRail`（pink/neon/cyber 侧栏 Footer **设置按钮上方** 陪伴区，约 80px 吉祥物）、`ThemeWatermark`（右下水印，`pointer-events-none`）。
+- 动画由 `ThemeAnimationBridge` 只读订阅 store（连接态边沿、TX 日志计数），通过 `data-fx` 驱动 `theme-fx.css`；**禁止**在 `openPort` / `appendLog` 等业务 action 内触发主题动画。
+- 悬停互动仅作用于可交互吉祥物（空状态、侧栏 Footer、设置主题预览）；水印不参与 hover。
+- 吉祥物 SVG 为 PrettyCOM 原创 Q 版资产（樱花兔、霓虹狐、星猫、赛博机器人），禁止第三方 IP 素材。
+- `@media (prefers-reduced-motion: reduce)` 下禁用 hop/粒子/悬停摆动动画。
+- 以下 `data-testid` 须保持稳定：`theme-select`、`theme-card-{id}`、`theme-companion-rail`、`theme-empty-illustration`、`theme-watermark`。
+- 主题切换不得影响既有 E2E `data-testid` 与日志虚拟列表行为；动画不断言像素，仅断言流程无报错（FCM **F29**、**F30**）。
 
 ## 工具面板（原检查器）
 
@@ -124,6 +137,11 @@
 - 折叠开关：`inspector-toggle`（TopBar）与侧栏 `SidebarRail`；折叠态宽约 `48px`，展开态约 `280px`。
 - icon 折叠态：纵向两枚 tab 图标（常用命令 / 列表发送）+ Tooltip。
 - `data-testid="inspector-panel"` 须保持稳定。
+- **常用命令**标签（`inspector-tab-commands`）采用纵向 flex 布局：快捷命令区约占可用高度 **65%**（`flex-[2]`），最近命令区约占 **35%**（`flex-1`）；去掉外层 `ScrollArea`，各区内部自行滚动。
+- 快捷命令标题行提供 DSL 导入/导出按钮：`alias-dsl-export`、`alias-dsl-import`；语法与列表发送 DSL 一致，命令行使用 `@label:` 扩展映射快捷名称。
+- **添加快捷命令**为 icon 按钮 `add-alias-btn`（`Plus` 图标），`title`/`aria-label` 提供完整文案，避免窄侧栏英文文字溢出。
+- **DSL 对话框**（快捷命令 `alias-dsl-*`、列表发送 `send-list-dsl-*`）共用同一交互：导出时标题「导出 DSL」、文本只读、提供 **复制 DSL** 与 **保存到文件**；导入时标题「导入 DSL」、可编辑文本、主按钮「导入」。`data-testid` 后缀：`-dialog`、`-copy`、`-save-file`、`-confirm-import`、`-import-error`（无有效命令时）。
+- 最近命令区标题行提供折叠按钮 `recent-commands-toggle`（`ChevronDown`/`ChevronRight`）；折叠状态持久化 `recentCommandsCollapsed`；折叠时仅保留标题行，展开时显示列表或空状态。
 
 ## 列表发送（工具面板）
 
@@ -134,8 +152,10 @@
 - 列表行展示规范：主行 `font-mono` 命令正文；次行人类可读 meta（如「发送 1 次 · 间隔 50 ms · CRLF · ASCII」），**禁止**行内 `1×50ms` 网格编辑。
 - 主操作为 **「全部发送」** / **「停止发送」**：按命令顺序依次发送，每条命令按自身循环次数、间隔与 suffix/mode 执行；运行中进度徽章使用「第 n/m 条 · 第 k 次发送」类文案。
 - 列表底部保留：列表名称、列表循环、列表间隔、「全部发送/停止」、DSL 导入导出（icon 按钮）。
+- 列表选择下拉 `send-list-select` 使用 `position="popper"`，触发器 `min-w-0 w-full` 截断长名称，避免下拉层拉伸遮挡同行工具按钮。
 - 串口断开或发送失败时须停止列表发送，避免后台继续写端口。
-- 支持 DSL 导入/导出（含 `@loop`、`@interval`、可选逐条 `@suffix`/`@mode` 及列表级元数据）。
+- 列表工具栏提供 DSL 导入/导出：`send-list-dsl-export`、`send-list-dsl-import`；对话框行为与快捷命令 DSL 一致（见上）。
+- 支持 DSL 导入/导出（含 `@listloop`、`@listinterval`、`@loop`、`@interval`、可选逐条 `@suffix`/`@mode` 及列表级元数据）。
 - 发送列表编辑区中，列表名称下方的命令区标题应使用「命令列表」，不得复用工具面板「常用命令」标签文案。
 
 ## 串口打开与连接按钮

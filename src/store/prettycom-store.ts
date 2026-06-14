@@ -165,6 +165,15 @@ function finalizeMergedState(state: PrettyComState): PrettyComState {
   }
 }
 
+export function mergeDefaultAliases(saved: Alias[] | undefined): Alias[] {
+  const defaults = createDefaultAliases()
+  const savedList = saved ?? []
+  const savedById = new Map(savedList.map((alias) => [alias.id, alias]))
+  const mergedDefaults = defaults.map((def) => savedById.get(def.id) ?? def)
+  const custom = savedList.filter((alias) => !defaults.some((def) => def.id === alias.id))
+  return [...mergedDefaults, ...custom]
+}
+
 export function mergePersistedPrettyComState(
   saved: Partial<PrettyComState> | undefined,
   current: PrettyComState
@@ -185,6 +194,8 @@ export function mergePersistedPrettyComState(
       ...current,
       ...saved,
       sendLists,
+      aliases: mergeDefaultAliases(saved?.aliases),
+      recentCommandsCollapsed: saved?.recentCommandsCollapsed ?? current.recentCommandsCollapsed,
       inspectorTab,
       maxLogEntriesPerSession,
       filter,
@@ -221,6 +232,8 @@ export function mergePersistedPrettyComState(
     ...current,
     ...saved,
     sendLists,
+    aliases: mergeDefaultAliases(saved?.aliases),
+    recentCommandsCollapsed: saved?.recentCommandsCollapsed ?? current.recentCommandsCollapsed,
     inspectorTab,
     maxLogEntriesPerSession,
     filter,
@@ -256,6 +269,7 @@ interface PrettyComState {
   maxLogEntriesPerSession: number
   sendLists: SendList[]
   sendListRunningId: string | null
+  recentCommandsCollapsed: boolean
   sessions: SessionProfile[]
   setCurrentSession: (sessionId: string) => void
   setSelectedLog: (logId: string) => void
@@ -272,9 +286,11 @@ interface PrettyComState {
   addCommandHistory: (entry: CommandHistoryEntry) => void
   deleteCommandHistory: (historyId: string) => void
   clearCommandHistory: () => void
+  setRecentCommandsCollapsed: (collapsed: boolean) => void
   addAlias: (alias: Alias) => void
   updateAlias: (aliasId: string, patch: Partial<Alias>) => void
   deleteAlias: (aliasId: string) => void
+  replaceAliases: (aliases: Alias[]) => void
   setFilter: (patch: Partial<LogFilter>) => void
   setLanguage: (language: Language) => void
   setTheme: (theme: Theme) => void
@@ -329,6 +345,7 @@ export const usePrettyComStore = create<PrettyComState>()(
       maxLogEntriesPerSession: DEFAULT_MAX_LOG_ENTRIES_PER_SESSION,
       sendLists: [],
       sendListRunningId: null,
+      recentCommandsCollapsed: false,
       sessions: initialSessions,
       setCurrentSession: (currentSessionId) =>
         set((state) => {
@@ -490,6 +507,7 @@ export const usePrettyComStore = create<PrettyComState>()(
           commandHistory: state.commandHistory.filter((entry) => entry.id !== historyId),
         })),
       clearCommandHistory: () => set({ commandHistory: [] }),
+      setRecentCommandsCollapsed: (recentCommandsCollapsed) => set({ recentCommandsCollapsed }),
       addAlias: (alias) => set((state) => ({ aliases: [...state.aliases, alias] })),
       updateAlias: (aliasId, patch) =>
         set((state) => ({
@@ -499,6 +517,7 @@ export const usePrettyComStore = create<PrettyComState>()(
         set((state) => ({
           aliases: state.aliases.filter((alias) => alias.id !== aliasId),
         })),
+      replaceAliases: (aliases) => set({ aliases }),
       setFilter: (patch) => set((state) => ({ filter: { ...state.filter, ...patch } })),
       setLanguage: (language) => set({ language }),
       setTheme: (theme) => {
@@ -563,6 +582,7 @@ export const usePrettyComStore = create<PrettyComState>()(
         inspectorTab: state.inspectorTab,
         commandHistory: state.commandHistory,
         aliases: state.aliases,
+        recentCommandsCollapsed: state.recentCommandsCollapsed,
         language: state.language,
         theme: state.theme,
         autoScroll: state.autoScroll,

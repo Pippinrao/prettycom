@@ -1,0 +1,232 @@
+@keyframes theme-tail-wag {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes theme-eye-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+@keyframes theme-hop {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  40% {
+    transform: translateY(-6px) scale(1.08);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes theme-nod {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-6deg);
+  }
+  70% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes theme-ear-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes theme-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes theme-idle-drop {
+  0% {
+    transform: translateY(-2px);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes theme-sparkle {
+  0% {
+    transform: scale(0) translateY(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(-12px);
+    opacity: 0;
+  }
+}
+
+@keyframes theme-companion-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes theme-companion-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes theme-led-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes theme-visor-scan {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px #22d3ee);
+  }
+}
+
+[data-fx="port-open"] .mascot-body {
+  animation: theme-hop 400ms ease-out;
+}
+
+[data-fx="send"] .mascot-body {
+  animation: theme-nod 280ms ease-out;
+}
+
+[data-fx="idle"] .mascot-body {
+  animation: theme-idle-drop 200ms ease-out;
+}
+
+.theme-companion-rail .theme-companion-mascot {
+  animation: theme-companion-float 3.2s ease-in-out infinite;
+}
+
+.theme-companion-rail .mascot-body {
+  animation: theme-companion-breathe 4s ease-in-out infinite;
+}
+
+[data-fx="port-open"] .theme-companion-rail .theme-companion-mascot {
+  animation: theme-hop 450ms ease-out;
+}
+
+[data-fx="send"] .theme-companion-rail .mascot-body {
+  animation: theme-nod 320ms ease-out;
+}
+
+[data-theme="anime"][data-fx="port-open"] .theme-sparkle {
+  animation: theme-sparkle 400ms ease-out forwards;
+}
+
+[data-theme="pink"] .theme-mascot-interactive:hover .mascot-tail,
+[data-theme="pink"] .theme-companion-rail:hover .mascot-tail {
+  animation: theme-tail-wag 300ms ease-in-out;
+  transform-origin: 50px 46px;
+}
+
+[data-theme="pink"] .theme-mascot-interactive:hover .mascot-ear-l,
+[data-theme="pink"] .theme-mascot-interactive:hover .mascot-ear-r,
+[data-theme="pink"] .theme-companion-rail:hover .mascot-ear-l,
+[data-theme="pink"] .theme-companion-rail:hover .mascot-ear-r {
+  animation: theme-ear-wiggle 220ms ease-out;
+}
+
+[data-theme="pink"] .theme-mascot-interactive:hover .mascot-body {
+  transform: translateY(-2px);
+  transition: transform 200ms ease-out;
+}
+
+[data-theme="anime"] .theme-mascot-interactive:hover .mascot-eye,
+[data-theme="anime"] .theme-companion-rail:hover .mascot-eye {
+  animation: theme-eye-pop 280ms ease-out;
+}
+
+[data-theme="anime"] .theme-mascot-interactive:hover .mascot-arm,
+[data-theme="anime"] .theme-companion-rail:hover .mascot-arm,
+[data-theme="anime"][data-fx="port-open"] .theme-companion-rail .mascot-arm {
+  animation: theme-wave 400ms ease-out;
+  transform-origin: 12px 28px;
+}
+
+[data-theme="cyber"] .theme-mascot-interactive:hover .mascot-visor,
+[data-theme="cyber"] .theme-companion-rail:hover .mascot-visor {
+  animation: theme-visor-scan 1.2s ease-in-out infinite;
+}
+
+[data-theme="cyber"] .mascot-led {
+  animation: theme-led-pulse 2.4s ease-in-out infinite;
+}
+
+[data-theme="cyber"][data-fx="port-open"] .mascot-led,
+[data-theme="cyber"][data-fx="send"] .mascot-led {
+  animation: theme-eye-pop 400ms ease-out;
+}
+
+[data-theme="cyber"] .theme-companion-rail:hover .mascot-arm-l,
+[data-theme="cyber"] .theme-companion-rail:hover .mascot-arm-r {
+  animation: theme-wave 280ms ease-out alternate;
+  transform-origin: center bottom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-fx] .mascot-body,
+  [data-fx] .theme-sparkle,
+  .theme-companion-rail .theme-companion-mascot,
+  .theme-companion-rail .mascot-body,
+  .theme-mascot-interactive:hover .mascot-ear-l,
+  .theme-mascot-interactive:hover .mascot-ear-r,
+  .theme-mascot-interactive:hover .mascot-arm,
+  .theme-mascot-interactive:hover .mascot-tail,
+  .theme-mascot-interactive:hover .mascot-eye,
+  [data-theme="cyber"] .mascot-led {
+    animation: none !important;
+  }
+
+  .theme-mascot-interactive:hover .mascot-body,
+  .theme-companion-rail:hover .theme-companion-mascot {
+    transform: none !important;
+  }
+}

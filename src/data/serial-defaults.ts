@@ -226,6 +226,7 @@ export function parseSendListDsl(dsl: string): {
         mode = modeMatch[1] as DisplayMode
       }
       const command = raw
+        .replace(/@label:\S+\s+/, "")
         .replace(/@loop:\d+/, "")
         .replace(/@interval:\d+/, "")
         .replace(/@suffix:\w+/, "")
@@ -248,5 +249,119 @@ export function parseSendListDsl(dsl: string): {
     suffix: listSuffix,
     mode: listMode,
     commands,
+  }
+}
+
+function parseDslMetaLine(raw: string, listSuffix: LineSuffix, listMode: DisplayMode) {
+  let suffix = listSuffix
+  let mode = listMode
+  const suffixMatch = raw.match(/@suffix:(\w+)/)
+  if (suffixMatch) {
+    suffix = suffixMatch[1] as LineSuffix
+  }
+  const modeMatch = raw.match(/@mode:(\w+)/)
+  if (modeMatch) {
+    mode = modeMatch[1] as DisplayMode
+  }
+  return { suffix, mode }
+}
+
+function stripDslMetaTags(raw: string) {
+  return raw
+    .replace(/@label:\S+\s+/, "")
+    .replace(/@loop:\d+/, "")
+    .replace(/@interval:\d+/, "")
+    .replace(/@suffix:\w+/, "")
+    .replace(/@mode:\w+/, "")
+    .trim()
+}
+
+export function serializeAliases(aliases: Alias[]): string {
+  const listSuffix = aliases[0]?.suffix ?? "crlf"
+  const listMode = aliases[0]?.mode ?? "ascii"
+  const lines = [
+    `@name:Quick Commands`,
+    `@listloop:1`,
+    `@listinterval:500`,
+    `@suffix:${listSuffix}`,
+    `@mode:${listMode}`,
+    SENDLIST_SEPARATOR,
+    ...aliases.map((alias) => {
+      const parts = [
+        `@label:${escapeDslValue(alias.name)} ${escapeDslValue(alias.command)}`,
+        `@loop:1`,
+        `@interval:500`,
+      ]
+      if (alias.suffix !== listSuffix) {
+        parts.push(`@suffix:${alias.suffix}`)
+      }
+      if (alias.mode !== listMode) {
+        parts.push(`@mode:${alias.mode}`)
+      }
+      return parts.join(" ")
+    }),
+  ]
+  return lines.join("\n")
+}
+
+export function parseAliasesDsl(dsl: string): { name: string; aliases: Alias[] } {
+  const lines = dsl.split("\n")
+  const sepIndex = lines.findIndex((line) => line.trim() === SENDLIST_SEPARATOR)
+
+  const headerLines = sepIndex >= 0 ? lines.slice(0, sepIndex) : []
+  const commandLines = sepIndex >= 0 ? lines.slice(sepIndex + 1) : lines
+
+  const meta: Record<string, string> = {}
+  for (const line of headerLines) {
+    const match = line.match(/^@(\w+):(.*)$/)
+    if (match) {
+      meta[match[1]] = unescapeDslValue(match[2].trim())
+    }
+  }
+
+  const listSuffix = (meta["suffix"] as LineSuffix) || "crlf"
+  const listMode = (meta["mode"] as DisplayMode) || "ascii"
+
+  const aliases: Alias[] = commandLines
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .map((raw) => {
+      const { suffix, mode } = parseDslMetaLine(raw, listSuffix, listMode)
+      const labelMatch = raw.match(/@label:(.+)/)
+      let name = ""
+      let command = stripDslMetaTags(raw)
+      if (labelMatch) {
+        const labelBody = labelMatch[1]
+          .replace(/@loop:\d+/, "")
+          .replace(/@interval:\d+/, "")
+          .replace(/@suffix:\w+/, "")
+          .replace(/@mode:\w+/, "")
+          .trim()
+        const spaceIndex = labelBody.indexOf(" ")
+        if (spaceIndex < 0) {
+          name = unescapeDslValue(labelBody)
+          command = unescapeDslValue(labelBody)
+        } else {
+          name = unescapeDslValue(labelBody.slice(0, spaceIndex).trim())
+          command = unescapeDslValue(labelBody.slice(spaceIndex + 1).trim())
+        }
+      }
+      if (!name) {
+        const spaceIndex = command.indexOf(" ")
+        name = spaceIndex < 0 ? command : command.slice(0, spaceIndex)
+      }
+      return {
+        id: crypto.randomUUID(),
+        name,
+        command,
+        suffix,
+        mode,
+      }
+    })
+    .filter((alias) => alias.command)
+
+  return {
+    name: meta["name"] || "",
+    aliases,
   }
 }

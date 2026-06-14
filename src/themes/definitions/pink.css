@@ -1,0 +1,79 @@
+[data-theme="pink"] {
+  --background: oklch(0.98 0.025 350);
+  --foreground: oklch(0.26 0.05 350);
+  --card: oklch(0.995 0.02 350);
+  --card-foreground: oklch(0.26 0.05 350);
+  --popover: oklch(0.995 0.02 350);
+  --popover-foreground: oklch(0.26 0.05 350);
+  --primary: oklch(0.68 0.22 350);
+  --primary-foreground: oklch(0.98 0.02 350);
+  --secondary: oklch(0.94 0.035 350);
+  --secondary-foreground: oklch(0.3 0.06 350);
+  --muted: oklch(0.94 0.03 350);
+  --muted-foreground: oklch(0.52 0.05 350);
+  --accent: oklch(0.92 0.05 350);
+  --accent-foreground: oklch(0.3 0.06 350);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: oklch(0.82 0.06 350);
+  --input: oklch(0.88 0.05 350);
+  --ring: oklch(0.68 0.22 350);
+  --success: oklch(0.68 0.14 150);
+  --warning: oklch(0.78 0.14 75);
+  --info: oklch(0.68 0.14 240);
+  --log-rx: oklch(0.52 0.14 280);
+  --log-tx: oklch(0.48 0.14 150);
+  --log-sys: oklch(0.55 0.06 75);
+  --sidebar: oklch(0.97 0.03 350);
+  --sidebar-foreground: oklch(0.28 0.05 350);
+  --sidebar-primary: oklch(0.68 0.22 350);
+  --sidebar-primary-foreground: oklch(0.98 0.02 350);
+  --sidebar-accent: oklch(0.94 0.035 350);
+  --sidebar-accent-foreground: oklch(0.3 0.06 350);
+  --sidebar-border: oklch(0.85 0.06 350);
+  --sidebar-ring: oklch(0.68 0.22 350);
+  --radius: 0.875rem;
+  --theme-decor-opacity: 1;
+  --theme-watermark-opacity: 0.15;
+  --theme-glow: oklch(0.82 0.1 350 / 45%);
+  --theme-log-stripe: oklch(0.96 0.03 350 / 70%);
+  --theme-button-radius: 9999px;
+  --font-sans: "Geist Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+}
+
+[data-theme="pink"] body {
+  background-image:
+    radial-gradient(circle at 8% 12%, oklch(0.88 0.08 350 / 30%) 0%, transparent 8%),
+    radial-gradient(circle at 92% 8%, oklch(0.9 0.06 350 / 25%) 0%, transparent 6%),
+    radial-gradient(ellipse 80% 40% at 0% 0%, oklch(0.92 0.06 350 / 35%), transparent);
+}
+
+[data-theme="pink"] [data-sidebar="sidebar"] {
+  background-image: radial-gradient(ellipse 60% 30% at 50% 100%, oklch(0.9 0.08 350 / 25%), transparent);
+  border-right: 1px solid oklch(0.85 0.06 350);
+}
+
+[data-theme="pink"] .bg-card {
+  border-color: oklch(0.85 0.06 350);
+  border-radius: var(--radius);
+}
+
+[data-theme="pink"] button[data-slot="button"] {
+  border-radius: var(--theme-button-radius);
+}
+
+[data-theme="pink"] button[data-slot="button"][data-variant="default"] {
+  box-shadow: 0 2px 8px oklch(0.68 0.22 350 / 25%);
+}
+
+[data-theme="pink"] [data-log-row="true"] {
+  border-bottom-color: oklch(0.88 0.05 350 / 60%);
+}
+
+[data-theme="pink"] [data-log-row="true"]:hover {
+  background-color: oklch(0.94 0.04 350 / 80%) !important;
+}
+
+[data-theme="pink"] [data-testid="theme-mascot"] {
+  filter: drop-shadow(0 2px 6px oklch(0.68 0.22 350 / 20%));
+}

@@ -16,8 +16,9 @@ PrettyCOM 的目标是打造一个好看、好用、稳定、功能完整的桌�
 - 不要在生产默认界面遗留测试数据、假日志或自动加载的样本数据。
 - 开发样本必须放在显式 dev-only 入口中，且生产构建不应默认出现。
 - 历史记录、日志记录等用户数据必须支持删除和清空。
-- UI 应保持克制精致，不使用装饰性大渐变、玻璃拟态堆叠或无意义视觉噪声。
+- UI 应保持克制精致；默认 `light`/`dark` 不使用装饰性大渐变或玻璃拟态堆叠。可选风格化主题（`pink`/`anime`）的吉祥物与轻动画见主题模块规范，不得影响串口核心交互密度。
 - 日志表头筛选、高亮规则、侧栏收起、打开串口按钮和串口退出释放等交互要求详见 [UI 交互与行为要求](docs/product/ui-interaction-requirements.md)，修改相关功能时必须同步维护该文档。
+- **主题与业务解耦**：主题、吉祥物、装饰动画一律在 `src/themes/` 维护；串口/日志/发送/store action **禁止** `if (theme)`。详见 [主题模块开发指南](docs/dev/themes.md) 与项目 skill `.cursor/skills/prettycom-themes/SKILL.md`。
 
 ## 技术约束
 
@@ -47,7 +48,7 @@ PrettyCOM 的目标是打造一个好看、好用、稳定、功能完整的桌�
 
 - 生产状态默认无日志、无样本帧。
 - 发送命令可以写入 TX 日志和最近命令历史。
-- 日志记录必须支持单条删除和全部清空。
+- 日志记录支持全部清空，不提供单条删除 UI（`deleteLogEntry` 仍供发送失败回滚使用）。
 - 最近命令历史必须支持回填、单条删除和全部清空。
 - 开发样本只能通过开发环境显式按钮或其他明确 dev-only 入口加载。
 - 不要将测试数据、演示数据或 mock 数据接到生产默认数据流。
@@ -76,8 +77,27 @@ PrettyCOM 的目标是打造一个好看、好用、稳定、功能完整的桌�
 
 - 改动 `serial-defaults` / `store` / `serial.ts` / `lib.rs` → 补/改对应 UT
 - 改动用户可见流程（`App.tsx`）→ 补 Web E2E 或更新 FCM
+- 改动 `src/themes/` 或主题相关 UI → 读 `.cursor/skills/prettycom-themes/SKILL.md`；补/改 `registry.test.ts`、`useThemeFx.test.ts`；更新 [主题开发指南](docs/dev/themes.md)；生成后 **必须** `npm run build`（防范 UTF-16 编码踩坑）
 - 改动真实串口收发 → 跑 `npm run test:rust`
 - 声称完成前必须运行相关命令并报告实际输出
+
+## 主题与装饰（速查）
+
+| 项 | 约定 |
+| --- | --- |
+| 模块路径 | `src/themes/`（`applyTheme` 唯一改 `data-theme` / `.dark`） |
+| 可用 ID | `light`、`dark`、`pink`、`anime`（霓虹）、`cyber`（赛博） |
+| 动画 | `ThemeAnimationBridge` 只读订阅 store，禁止在业务 action 内触发 |
+| 吉祥物 | PrettyCOM 原创 SVG，禁止第三方 IP |
+| 详细文档 | [docs/dev/themes.md](docs/dev/themes.md) |
+| Agent skill | [.cursor/skills/prettycom-themes/SKILL.md](.cursor/skills/prettycom-themes/SKILL.md) |
+
+### 主题相关踩坑（Windows 协作）
+
+1. **UTF-16 文件**：Agent 批量写出 `src/themes/**` 可能为 UTF-16 LE，导致 `tsc`/Vite 失败 → 用 UTF-8 无 BOM 重写并跑 `npm run build`。
+2. **漏挂 `.dark`**：`anime` 等深色风格须在 registry 设 `usesDarkClass: true`，否则 shadcn `dark:` 变体失效。
+3. **业务耦合主题**：任何发送/连接成功回调里不得按主题播动画；只用装饰层订阅。
+4. **E2E 文案**：中文界面主题名为「霓虹主题」，卡片 testid 仍为 `theme-card-anime`（主题 ID 未改）。
 
 ## 验证规范
 

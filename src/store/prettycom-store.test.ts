@@ -5,6 +5,7 @@ import * as runtimeEnv from "@/lib/runtime-env"
 import {
   createSessionProfile,
   DEV_TEST_SESSION_ID,
+  mergeDefaultAliases,
   mergePersistedPrettyComState,
   migrateSendListCommands,
   normalizeRxDisplayMode,
@@ -137,6 +138,24 @@ describe("prettycom-store", () => {
     expect(usePrettyComStore.getState().theme).toBe("light")
     expect(usePrettyComStore.getState().suffix).toBe("lf")
     expect(document.documentElement.classList.contains("dark")).toBe(false)
+    expect(document.documentElement.dataset.theme).toBe("light")
+  })
+
+  it("setTheme applies pink, anime, and cyber themes", () => {
+    usePrettyComStore.getState().setTheme("pink")
+    expect(usePrettyComStore.getState().theme).toBe("pink")
+    expect(document.documentElement.dataset.theme).toBe("pink")
+    expect(document.documentElement.classList.contains("dark")).toBe(false)
+
+    usePrettyComStore.getState().setTheme("anime")
+    expect(usePrettyComStore.getState().theme).toBe("anime")
+    expect(document.documentElement.dataset.theme).toBe("anime")
+    expect(document.documentElement.classList.contains("dark")).toBe(true)
+
+    usePrettyComStore.getState().setTheme("cyber")
+    expect(usePrettyComStore.getState().theme).toBe("cyber")
+    expect(document.documentElement.dataset.theme).toBe("cyber")
+    expect(document.documentElement.classList.contains("dark")).toBe(true)
   })
 
   it("sanitizeProductionSessions keeps placeholder in dev/e2e runtime", () => {
@@ -315,5 +334,60 @@ describe("prettycom-store", () => {
   it("setInspectorOpen persists inspector panel state", () => {
     usePrettyComStore.getState().setInspectorOpen(false)
     expect(usePrettyComStore.getState().inspectorOpen).toBe(false)
+  })
+
+  it("mergeDefaultAliases restores missing built-in aliases from empty persisted state", () => {
+    const merged = mergeDefaultAliases([])
+    expect(merged).toHaveLength(4)
+    expect(merged.map((a) => a.id)).toEqual(["reset", "version", "ping", "boot"])
+  })
+
+  it("mergeDefaultAliases preserves user customizations for built-in ids", () => {
+    const merged = mergeDefaultAliases([
+      { id: "reset", name: "Custom Reset", command: "AT+RESET", mode: "ascii", suffix: "crlf" },
+    ])
+    expect(merged.find((a) => a.id === "reset")?.command).toBe("AT+RESET")
+    expect(merged).toHaveLength(4)
+  })
+
+  it("mergeDefaultAliases keeps user-defined aliases with custom ids", () => {
+    const custom = { id: "custom-1", name: "Foo", command: "FOO", mode: "ascii" as const, suffix: "crlf" as const }
+    const merged = mergeDefaultAliases([custom])
+    expect(merged).toHaveLength(5)
+    expect(merged.at(-1)).toEqual(custom)
+  })
+
+  it("mergePersistedPrettyComState merges default aliases when saved aliases empty", () => {
+    const restored = mergePersistedPrettyComState({ aliases: [] }, usePrettyComStore.getState())
+    expect(restored.aliases).toHaveLength(4)
+    expect(restored.aliases[0].command).toBe("AT+RST")
+  })
+
+  it("replaceAliases replaces all aliases", () => {
+    usePrettyComStore.getState().replaceAliases([
+      { id: "x1", name: "One", command: "CMD1", mode: "ascii", suffix: "crlf" },
+    ])
+    expect(usePrettyComStore.getState().aliases).toHaveLength(1)
+    expect(usePrettyComStore.getState().aliases[0].command).toBe("CMD1")
+  })
+
+  it("recentCommandsCollapsed persists via setRecentCommandsCollapsed", () => {
+    expect(usePrettyComStore.getState().recentCommandsCollapsed).toBe(false)
+    usePrettyComStore.getState().setRecentCommandsCollapsed(true)
+    expect(usePrettyComStore.getState().recentCommandsCollapsed).toBe(true)
+    const restored = mergePersistedPrettyComState(
+      { recentCommandsCollapsed: true },
+      usePrettyComStore.getState()
+    )
+    expect(restored.recentCommandsCollapsed).toBe(true)
+  })
+
+  it("clearLogs removes all logs for session", () => {
+    const entry = createTxLogEntry(new Uint8Array([0x41]), "A", 100)
+    usePrettyComStore.getState().appendLog("s1", entry)
+    expect(usePrettyComStore.getState().sessions[0].logs).toHaveLength(1)
+    usePrettyComStore.getState().clearLogs("s1")
+    expect(usePrettyComStore.getState().sessions[0].logs).toHaveLength(0)
+    expect(usePrettyComStore.getState().selectedLogId).toBe("")
   })
 })

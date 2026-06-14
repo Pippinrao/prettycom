@@ -1,0 +1,104 @@
+[data-theme="anime"] {
+  --background: oklch(0.13 0.045 285);
+  --foreground: oklch(0.93 0.025 300);
+  --card: oklch(0.17 0.05 285);
+  --card-foreground: oklch(0.93 0.025 300);
+  --popover: oklch(0.18 0.055 285);
+  --popover-foreground: oklch(0.93 0.025 300);
+  --primary: oklch(0.74 0.26 310);
+  --primary-foreground: oklch(0.12 0.04 285);
+  --secondary: oklch(0.22 0.055 285);
+  --secondary-foreground: oklch(0.9 0.025 300);
+  --muted: oklch(0.24 0.06 295);
+  --muted-foreground: oklch(0.7 0.04 300);
+  --accent: oklch(0.3 0.1 280);
+  --accent-foreground: oklch(0.95 0.02 300);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: oklch(0.62 0.2 310 / 35%);
+  --input: oklch(0.55 0.16 300 / 28%);
+  --ring: oklch(0.74 0.26 310);
+  --success: oklch(0.72 0.17 150);
+  --warning: oklch(0.8 0.17 75);
+  --info: oklch(0.75 0.22 250);
+  --log-rx: oklch(0.75 0.22 250);
+  --log-tx: oklch(0.72 0.2 150);
+  --log-sys: oklch(0.78 0.12 75);
+  --sidebar: oklch(0.15 0.05 285);
+  --sidebar-foreground: oklch(0.9 0.025 300);
+  --sidebar-primary: oklch(0.74 0.26 310);
+  --sidebar-primary-foreground: oklch(0.12 0.04 285);
+  --sidebar-accent: oklch(0.24 0.06 295);
+  --sidebar-accent-foreground: oklch(0.9 0.025 300);
+  --sidebar-border: oklch(0.62 0.2 310 / 35%);
+  --sidebar-ring: oklch(0.74 0.26 310);
+  --radius: 1rem;
+  --theme-decor-opacity: 1;
+  --theme-watermark-opacity: 0.16;
+  --theme-glow: oklch(0.68 0.28 310 / 50%);
+  --theme-chrome-accent: oklch(0.74 0.26 310);
+  --theme-log-stripe: oklch(0.19 0.05 295 / 55%);
+  --font-sans: "Geist Variable", "Segoe UI", "Yu Gothic UI", "Meiryo UI", sans-serif;
+}
+
+[data-theme="anime"] body {
+  background-image:
+    radial-gradient(ellipse 90% 45% at 50% -5%, oklch(0.5 0.22 310 / 22%), transparent),
+    radial-gradient(ellipse 70% 50% at 100% 100%, oklch(0.45 0.18 280 / 14%), transparent);
+}
+
+[data-theme="anime"] body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    oklch(0.65 0.25 310),
+    oklch(0.7 0.2 250),
+    oklch(0.74 0.26 310)
+  );
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: 0 0 12px oklch(0.74 0.26 310 / 60%);
+}
+
+[data-theme="anime"] [data-sidebar="sidebar"] {
+  border-right: 1px solid oklch(0.62 0.2 310 / 40%);
+  box-shadow:
+    inset -1px 0 0 oklch(0.7 0.2 250 / 15%),
+    4px 0 16px oklch(0.5 0.2 310 / 8%);
+}
+
+[data-theme="anime"] .bg-card {
+  border-color: oklch(0.62 0.2 310 / 30%);
+  box-shadow: 0 0 0 1px oklch(0.62 0.2 310 / 12%);
+}
+
+[data-theme="anime"] [data-log-row="true"] {
+  border-bottom-color: oklch(0.55 0.14 300 / 25%);
+}
+
+[data-theme="anime"] [data-log-row="true"]:hover {
+  background-color: oklch(0.28 0.08 295 / 35%) !important;
+}
+
+[data-theme="anime"] .theme-accent-glow {
+  box-shadow: 0 0 24px var(--theme-glow);
+}
+
+[data-theme="anime"] button[data-slot="button"]:not(:disabled) {
+  border-color: oklch(0.62 0.2 310 / 30%);
+}
+
+[data-theme="anime"] button[data-slot="button"][data-variant="default"]:not(:disabled) {
+  box-shadow:
+    0 0 12px oklch(0.74 0.26 310 / 35%),
+    inset 0 1px 0 oklch(0.85 0.15 310 / 20%);
+}
+
+[data-theme="anime"] [data-testid="theme-mascot"] {
+  filter: drop-shadow(0 0 8px oklch(0.74 0.26 310 / 40%));
+}

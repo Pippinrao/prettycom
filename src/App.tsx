@@ -6,6 +6,8 @@ import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
 import {
   Bolt,
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   CircleOff,
   Copy,
@@ -20,7 +22,6 @@ import {
   Play,
   PlugZap,
   Plus,
-  RadioTower,
   RefreshCcw,
   Search,
   Send,
@@ -46,6 +47,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DslImportExportDialog, type DslDialogMode } from "@/components/DslImportExportDialog"
 import {
   Dialog,
   DialogContent,
@@ -121,8 +123,10 @@ import {
   createTxLogEntry,
   DEFAULT_SERIAL_CONFIG,
   formatLogPayload,
+  parseAliasesDsl,
   parseHexString,
   parseSendListDsl,
+  serializeAliases,
   serializeSendList,
 } from "@/data/serial-defaults"
 import { DEFAULT_TEST_PORT_A } from "@/data/test-ports"
@@ -164,9 +168,15 @@ import type {
   SendList,
   SendListCommand,
   SerialConfig,
-  Theme,
 } from "@/types/serial"
-import { applyTheme } from "@/lib/theme"
+import { applyTheme, getCodeMirrorTheme } from "@/lib/theme"
+import {
+  ThemeAnimationBridge,
+  ThemeAppearanceSection,
+  ThemeCompanionRail,
+  ThemeEmptyIllustration,
+  ThemeWatermark,
+} from "@/themes"
 
 const suffixLabel: Record<LineSuffix, string> = {
   none: "None",
@@ -216,17 +226,20 @@ function App() {
   useEffect(() => setupSerialEventBridge(), [])
 
   return (
-    <TooltipProvider>
-      <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-          <AppSidebar />
-          <SidebarInset className="min-w-0 flex-1">
-            <Workbench onOpenPort={() => setOpenPortDialogOpen(true)} />
-          </SidebarInset>
-        </div>
-        <OpenPortDialog open={openPortDialogOpen} onOpenChange={setOpenPortDialogOpen} />
-      </SidebarProvider>
-    </TooltipProvider>
+    <ThemeAnimationBridge>
+      <TooltipProvider>
+        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <div className="relative flex h-screen w-full overflow-hidden bg-background text-foreground">
+            <AppSidebar />
+            <SidebarInset className="min-w-0 flex-1">
+              <Workbench onOpenPort={() => setOpenPortDialogOpen(true)} />
+            </SidebarInset>
+            <ThemeWatermark />
+          </div>
+          <OpenPortDialog open={openPortDialogOpen} onOpenChange={setOpenPortDialogOpen} />
+        </SidebarProvider>
+      </TooltipProvider>
+    </ThemeAnimationBridge>
   )
 }
 
@@ -384,16 +397,19 @@ function AppSidebar() {
             <AlertDescription>{currentSession.path}</AlertDescription>
           </Alert>
         ) : null}
-        <Button
-          variant="ghost"
-          className="mx-2 justify-start gap-2 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
-          onClick={() => setSettingsOpen(true)}
-          data-testid="settings-open"
-          title={t("Settings")}
-        >
-          <Settings className="size-4" />
-          <span className="group-data-[collapsible=icon]:hidden">{t("Settings")}</span>
-        </Button>
+        <ThemeCompanionRail />
+        <div className="mx-2">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+            onClick={() => setSettingsOpen(true)}
+            data-testid="settings-open"
+            title={t("Settings")}
+          >
+            <Settings className="size-4" />
+            <span className="group-data-[collapsible=icon]:hidden">{t("Settings")}</span>
+          </Button>
+        </div>
       </SidebarFooter>
       <SidebarRail label={t("Toggle Sidebar")} />
     </Sidebar>
@@ -826,7 +842,6 @@ function LogStream({ session }: { session: SessionProfile }) {
   const getFilteredLogs = usePrettyComStore((state) => state.getFilteredLogs)
   const selectedLogId = usePrettyComStore((state) => state.selectedLogId)
   const setSelectedLog = usePrettyComStore((state) => state.setSelectedLog)
-  const deleteLogEntry = usePrettyComStore((state) => state.deleteLogEntry)
   const setSessionLogs = usePrettyComStore((state) => state.setSessionLogs)
   const logDisplayMode = usePrettyComStore((state) => state.logDisplayMode)
   const filter = usePrettyComStore((state) => state.filter)
@@ -876,9 +891,7 @@ function LogStream({ session }: { session: SessionProfile }) {
       {!totalCount ? (
         <div className="flex h-full items-center justify-center p-8">
           <div className="max-w-sm text-center">
-            <div className="mx-auto flex size-10 items-center justify-center rounded-lg border border-border bg-card">
-              <RadioTower className="size-5 text-muted-foreground" />
-            </div>
+            <ThemeEmptyIllustration />
             <h3 className="mt-4 text-sm font-medium">{t("No serial history")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {import.meta.env.DEV
@@ -921,7 +934,6 @@ function LogStream({ session }: { session: SessionProfile }) {
                       zebra={virtualRow.index % 2 === 0}
                       selected={entry.id === selectedLogId}
                       onSelect={() => setSelectedLog(entry.id)}
-                      onDelete={() => deleteLogEntry(session.id, entry.id)}
                       top={virtualRow.start}
                     />
                   )
@@ -1124,13 +1136,12 @@ function LogChrome({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <div className="grid h-7 grid-cols-[108px_54px_1fr_72px_64px_32px] items-center border-l-2 border-l-transparent px-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="grid h-7 grid-cols-[108px_54px_1fr_72px_64px] items-center border-l-2 border-l-transparent px-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         <span>{t("Time")}</span>
         <span>{t("Dir")}</span>
         <span>{t("Payload")}</span>
         <span>{t("Bytes")}</span>
         <span className="text-right">{t("Gap")}</span>
-        <span />
       </div>
     </div>
   )
@@ -1385,7 +1396,6 @@ const LogLine = memo(function LogLine({
   zebra,
   selected,
   onSelect,
-  onDelete,
   top,
 }: {
   entry: LogEntry
@@ -1394,7 +1404,6 @@ const LogLine = memo(function LogLine({
   zebra: boolean
   selected: boolean
   onSelect: () => void
-  onDelete: () => void
   top: number
 }) {
   const t = useT()
@@ -1415,7 +1424,7 @@ const LogLine = memo(function LogLine({
           data-log-row="true"
           data-testid={`log-row-${entry.id}`}
           className={cn(
-            "group absolute left-0 grid h-[34px] w-full grid-cols-[108px_54px_1fr_72px_64px_32px] items-center border-b border-border/35 px-4 text-left transition-colors hover:bg-accent/50",
+            "group absolute left-0 grid h-[34px] w-full grid-cols-[108px_54px_1fr_72px_64px] items-center border-b border-border/35 px-4 text-left transition-colors hover:bg-accent/50",
             zebra && "bg-muted/20",
             entry.direction === "RX" && "border-l-2 border-l-log-rx/50",
             entry.direction === "TX" && "border-l-2 border-l-log-tx/50",
@@ -1450,15 +1459,6 @@ const LogLine = memo(function LogLine({
             <span className="text-muted-foreground">{entry.bytes} bytes</span>
             <span className="text-right text-muted-foreground">+{entry.delta}ms</span>
           </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 opacity-0 transition-opacity group-hover:opacity-100"
-            aria-label={t("Delete log entry")}
-            onClick={onDelete}
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -1469,10 +1469,6 @@ const LogLine = memo(function LogLine({
         <ContextMenuItem data-testid="log-row-copy-hex" onSelect={() => void copyText(entry.hex)}>
           <Copy className="size-4" />
           {t("Copy HEX")}
-        </ContextMenuItem>
-        <ContextMenuItem variant="destructive" data-testid="log-row-delete" onSelect={onDelete}>
-          <Trash2 className="size-4" />
-          {t("Delete log entry")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -1665,7 +1661,7 @@ function CommandComposer({ session }: { session: SessionProfile }) {
             height="auto"
             minHeight="40px"
             maxHeight="96px"
-            theme={theme === "dark" ? "dark" : "light"}
+            theme={getCodeMirrorTheme(theme)}
             basicSetup={{ lineNumbers: false, foldGutter: false }}
             extensions={editorExtensions}
             onChange={setCommandText}
@@ -1759,6 +1755,7 @@ function SendListPanel({ session }: { session: SessionProfile }) {
 
   const [selectedId, setSelectedId] = useState<string | null>(sendLists[0]?.id ?? null)
   const [dslOpen, setDslOpen] = useState(false)
+  const [dslMode, setDslMode] = useState<DslDialogMode>("import")
   const [dslText, setDslText] = useState("")
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [cmdDialogOpen, setCmdDialogOpen] = useState(false)
@@ -1947,7 +1944,14 @@ function SendListPanel({ session }: { session: SessionProfile }) {
 
   const exportDsl = () => {
     if (!list) return
+    setDslMode("export")
     setDslText(serializeSendList(list))
+    setDslOpen(true)
+  }
+
+  const openImportDsl = () => {
+    setDslMode("import")
+    setDslText("")
     setDslOpen(true)
   }
 
@@ -2083,62 +2087,76 @@ function SendListPanel({ session }: { session: SessionProfile }) {
 
   if (!list) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
-        <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-          {t("No send lists yet")}
-          <br />
-          {t("Create a send list to batch commands with loop and interval.")}
+      <>
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+          <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+            {t("No send lists yet")}
+            <br />
+            {t("Create a send list to batch commands with loop and interval.")}
+          </div>
+          <Button size="sm" variant="outline" className="gap-1" onClick={createList}>
+            <Plus className="size-3.5" />
+            {t("New list")}
+          </Button>
+          <Button size="sm" variant="ghost" className="gap-1" onClick={openImportDsl} data-testid="send-list-dsl-import">
+            <Upload className="size-3.5" />
+            {t("Import DSL")}
+          </Button>
         </div>
-        <Button size="sm" variant="outline" className="gap-1" onClick={createList}>
-          <Plus className="size-3.5" />
-          {t("New list")}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="gap-1"
-          onClick={() => {
-            setDslText("")
-            setDslOpen(true)
-          }}
-        >
-          <Download className="size-3.5" />
-          {t("Import DSL")}
-        </Button>
-      </div>
+        <DslImportExportDialog
+          open={dslOpen}
+          onOpenChange={setDslOpen}
+          mode={dslMode}
+          text={dslText}
+          onTextChange={setDslText}
+          onImport={importDsl}
+          placeholder={`@name:My List\n@listloop:1\n@listinterval:500\n@suffix:crlf\n@mode:ascii\n---\nAT+RST\nAT+GMR`}
+          testIdPrefix="send-list-dsl"
+          defaultFileName="send-list.dsl"
+          importDescriptionKey="Paste your send list DSL here."
+        />
+      </>
     )
   }
 
   return (
+    <>
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center gap-2">
-        <Select value={selectedId ?? ""} onValueChange={setSelectedId}>
-          <SelectTrigger className="h-8 flex-1 text-xs">
-            <SelectValue placeholder={t("Select a list")} />
-          </SelectTrigger>
-          <SelectContent>
-            {sendLists.map((sl) => (
-              <SelectItem key={sl.id} value={sl.id}>
-                {sl.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="min-w-0 flex-1">
+          <Select value={selectedId ?? ""} onValueChange={setSelectedId}>
+            <SelectTrigger className="h-8 min-w-0 w-full text-xs" data-testid="send-list-select">
+              <SelectValue placeholder={t("Select a list")} />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-50 max-h-64">
+              {sendLists.map((sl) => (
+                <SelectItem key={sl.id} value={sl.id}>
+                  {sl.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Button size="icon" variant="outline" className="size-8 shrink-0" onClick={createList} title={t("New list")}>
           <Plus className="size-3.5" />
         </Button>
-        <Button size="icon" variant="outline" className="size-8 shrink-0" onClick={exportDsl} title={t("Export DSL")}>
+        <Button
+          size="icon"
+          variant="outline"
+          className="size-8 shrink-0"
+          onClick={exportDsl}
+          title={t("Export DSL")}
+          data-testid="send-list-dsl-export"
+        >
           <Download className="size-3.5" />
         </Button>
         <Button
           size="icon"
           variant="outline"
           className="size-8 shrink-0"
-          onClick={() => {
-            setDslText("")
-            setDslOpen(true)
-          }}
+          onClick={openImportDsl}
           title={t("Import DSL")}
+          data-testid="send-list-dsl-import"
         >
           <Upload className="size-3.5" />
         </Button>
@@ -2293,29 +2311,21 @@ function SendListPanel({ session }: { session: SessionProfile }) {
         )}
       </Button>
 
-      <Dialog open={dslOpen} onOpenChange={setDslOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("Send list DSL")}</DialogTitle>
-            <DialogDescription>{t("Paste your send list DSL here.")}</DialogDescription>
-          </DialogHeader>
-          <Textarea
-            className="min-h-[200px] font-mono text-xs"
-            value={dslText}
-            onChange={(e) => setDslText(e.target.value)}
-            placeholder={`@name:My List\n@loop:3\n@interval:500\n@suffix:crlf\n@mode:ascii\n---\nAT+RST\nAT+GMR`}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDslOpen(false)}>
-              {t("Cancel")}
-            </Button>
-            <Button onClick={importDsl}>{t("Import")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {cmdDialog}
     </div>
+    <DslImportExportDialog
+      open={dslOpen}
+      onOpenChange={setDslOpen}
+      mode={dslMode}
+      text={dslText}
+      onTextChange={setDslText}
+      onImport={importDsl}
+      placeholder={`@name:My List\n@listloop:1\n@listinterval:500\n@suffix:crlf\n@mode:ascii\n---\nAT+RST\nAT+GMR`}
+      testIdPrefix="send-list-dsl"
+      defaultFileName={`${list.name.replace(/[^\w.-]+/g, "_") || "send-list"}.dsl`}
+      importDescriptionKey="Paste your send list DSL here."
+    />
+    </>
   )
 }
 
@@ -2386,14 +2396,12 @@ function Inspector({ session }: { session: SessionProfile }) {
                 </TabsTrigger>
               </TabsList>
             </div>
-            <ScrollArea className="min-h-0 flex-1">
-              <TabsContent value="commands" className="m-0 space-y-3 p-3">
+            <TabsContent value="commands" className="m-0 flex h-full min-h-0 flex-col p-3">
                 <CommandsPanel />
               </TabsContent>
-              <TabsContent value="sendlist" className="m-0 h-full p-3">
+              <TabsContent value="sendlist" className="m-0 h-full min-h-0 p-3">
                 <SendListPanel session={session} />
               </TabsContent>
-            </ScrollArea>
           </Tabs>
         </SidebarContent>
       )}
@@ -2411,10 +2419,17 @@ function CommandsPanel() {
   const addAlias = usePrettyComStore((state) => state.addAlias)
   const updateAlias = usePrettyComStore((state) => state.updateAlias)
   const deleteAlias = usePrettyComStore((state) => state.deleteAlias)
+  const replaceAliases = usePrettyComStore((state) => state.replaceAliases)
   const commandHistory = usePrettyComStore((state) => state.commandHistory)
   const deleteCommandHistory = usePrettyComStore((state) => state.deleteCommandHistory)
   const clearCommandHistory = usePrettyComStore((state) => state.clearCommandHistory)
+  const recentCommandsCollapsed = usePrettyComStore((state) => state.recentCommandsCollapsed)
+  const setRecentCommandsCollapsed = usePrettyComStore((state) => state.setRecentCommandsCollapsed)
   const [editorOpen, setEditorOpen] = useState(false)
+  const [dslOpen, setDslOpen] = useState(false)
+  const [dslMode, setDslMode] = useState<DslDialogMode>("import")
+  const [dslText, setDslText] = useState("")
+  const [dslImportError, setDslImportError] = useState("")
   const [editingAlias, setEditingAlias] = useState<Alias | null>(null)
   const [aliasName, setAliasName] = useState("")
   const [aliasCommand, setAliasCommand] = useState("")
@@ -2465,18 +2480,71 @@ function CommandsPanel() {
     setSuffix(alias.suffix)
   }
 
+  const exportAliasDsl = () => {
+    setDslMode("export")
+    setDslText(serializeAliases(aliases))
+    setDslOpen(true)
+  }
+
+  const openImportAliasDsl = () => {
+    setDslMode("import")
+    setDslText("")
+    setDslImportError("")
+    setDslOpen(true)
+  }
+
+  const importAliasDsl = () => {
+    const parsed = parseAliasesDsl(dslText)
+    if (!parsed.aliases.length) {
+      setDslImportError(t("No valid commands found in DSL."))
+      return
+    }
+    setDslImportError("")
+    replaceAliases(parsed.aliases)
+    setDslOpen(false)
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex min-h-0 flex-[2] flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-medium">{t("Quick commands")}</h3>
-          <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1" onClick={openCreateAlias} data-testid="add-alias-btn">
-            <Plus className="size-3.5" />
-            {t("Add quick command")}
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              size="icon"
+              variant="outline"
+              className="size-7"
+              onClick={exportAliasDsl}
+              title={t("Export DSL")}
+              data-testid="alias-dsl-export"
+            >
+              <Download className="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="size-7"
+              onClick={openImportAliasDsl}
+              title={t("Import DSL")}
+              data-testid="alias-dsl-import"
+            >
+              <Upload className="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="size-7 shrink-0"
+              onClick={openCreateAlias}
+              title={t("Add quick command")}
+              aria-label={t("Add quick command")}
+              data-testid="add-alias-btn"
+            >
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
         </div>
         {aliases.length ? (
-          <ScrollArea className="h-[min(220px,40vh)] rounded-md border border-border/70">
+          <ScrollArea className="min-h-0 flex-1 rounded-md border border-border/70">
             <div className="min-w-0 divide-y divide-border/50">
               {aliases.map((alias) => (
                 <div
@@ -2528,9 +2596,26 @@ function CommandsPanel() {
         )}
       </div>
       <Separator />
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{t("Recent commands")}</h3>
+      <div className={cn("flex min-h-0 flex-col gap-2", !recentCommandsCollapsed && "flex-1")}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7 shrink-0"
+              aria-expanded={!recentCommandsCollapsed}
+              aria-label={t("Toggle recent commands")}
+              data-testid="recent-commands-toggle"
+              onClick={() => setRecentCommandsCollapsed(!recentCommandsCollapsed)}
+            >
+              {recentCommandsCollapsed ? (
+                <ChevronRight className="size-4" />
+              ) : (
+                <ChevronDown className="size-4" />
+              )}
+            </Button>
+            <h3 className="truncate text-sm font-medium">{t("Recent commands")}</h3>
+          </div>
           <Button
             size="sm"
             variant="ghost"
@@ -2542,48 +2627,68 @@ function CommandsPanel() {
             {t("Clear")}
           </Button>
         </div>
-        {commandHistory.length ? (
-          <ScrollArea className="h-[min(220px,40vh)] rounded-md border border-border/70">
-            <div className="min-w-0 divide-y divide-border/50">
-              {commandHistory.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 py-1.5 hover:bg-accent/30"
-                  data-testid={`history-item-${entry.id}`}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 text-left"
-                    onClick={() => {
-                      setCommandText(entry.command)
-                      setSendDisplayMode(entry.mode)
-                      setSuffix(entry.suffix)
-                    }}
+        {!recentCommandsCollapsed ? (
+          commandHistory.length ? (
+            <ScrollArea className="min-h-0 flex-1 rounded-md border border-border/70">
+              <div className="min-w-0 divide-y divide-border/50">
+                {commandHistory.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 py-1.5 hover:bg-accent/30"
+                    data-testid={`history-item-${entry.id}`}
                   >
-                    <div className="truncate font-mono text-[11px]">{entry.command}</div>
-                    <div className="truncate text-[11px] text-muted-foreground">
-                      {entry.sentAt} · {entry.mode.toUpperCase()} · {t(suffixLabel[entry.suffix])}
-                    </div>
-                  </button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-6 opacity-70 transition-opacity group-hover:opacity-100"
-                    aria-label={t("Delete command history")}
-                    onClick={() => deleteCommandHistory(entry.id)}
-                  >
-                    <Trash2 className="size-3" />
-                  </Button>
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      className="min-w-0 text-left"
+                      onClick={() => {
+                        setCommandText(entry.command)
+                        setSendDisplayMode(entry.mode)
+                        setSuffix(entry.suffix)
+                      }}
+                    >
+                      <div className="truncate font-mono text-[11px]">{entry.command}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {entry.sentAt} · {entry.mode.toUpperCase()} · {t(suffixLabel[entry.suffix])}
+                      </div>
+                    </button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 opacity-70 transition-opacity group-hover:opacity-100"
+                      aria-label={t("Delete command history")}
+                      onClick={() => deleteCommandHistory(entry.id)}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+              {t("Sent commands will appear here. You can reuse or remove them at any time.")}
             </div>
-          </ScrollArea>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-            {t("Sent commands will appear here. You can reuse or remove them at any time.")}
-          </div>
-        )}
+          )
+        ) : null}
       </div>
+      <DslImportExportDialog
+        open={dslOpen}
+        onOpenChange={setDslOpen}
+        mode={dslMode}
+        text={dslText}
+        onTextChange={(text) => {
+          setDslText(text)
+          if (dslImportError) {
+            setDslImportError("")
+          }
+        }}
+        onImport={importAliasDsl}
+        placeholder={`@name:Team Shortcuts\n@listloop:1\n@listinterval:500\n@suffix:crlf\n@mode:ascii\n---\n@label:Reset AT+RST @loop:1 @interval:500\n@label:Version AT+GMR @loop:1 @interval:500`}
+        testIdPrefix="alias-dsl"
+        defaultFileName="quick-commands.dsl"
+        importDescriptionKey="Paste your quick commands DSL here."
+        importError={dslImportError || undefined}
+      />
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -2648,8 +2753,6 @@ function SettingsSheet({
   const setLanguage = usePrettyComStore((state) => state.setLanguage)
   const maxLogEntriesPerSession = usePrettyComStore((state) => state.maxLogEntriesPerSession)
   const setMaxLogEntriesPerSession = usePrettyComStore((state) => state.setMaxLogEntriesPerSession)
-  const theme = usePrettyComStore((state) => state.theme)
-  const setTheme = usePrettyComStore((state) => state.setTheme)
   const suffix = usePrettyComStore((state) => state.suffix)
   const setSuffix = usePrettyComStore((state) => state.setSuffix)
 
@@ -2703,21 +2806,7 @@ function SettingsSheet({
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-[1fr_1fr] items-center gap-4 border-b border-border px-4 py-3">
-            <div>
-              <div className="text-sm font-medium">{t("Appearance")}</div>
-              <div className="text-xs text-muted-foreground">{t("Choose light or dark interface theme.")}</div>
-            </div>
-            <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
-              <SelectTrigger data-testid="theme-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dark">{t("Dark theme")}</SelectItem>
-                <SelectItem value="light">{t("Light theme")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <ThemeAppearanceSection />
           <div className="grid grid-cols-[1fr_1fr] items-center gap-4 px-4 py-3">
             <div>
               <div className="text-sm font-medium">{t("Default suffix")}</div>

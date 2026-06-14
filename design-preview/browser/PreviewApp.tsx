@@ -9,6 +9,9 @@ import {
   type SchemeKind,
   type ThemeKind,
 } from "../shared/workbench-mock"
+import { ThemeRedesignPreview } from "./ThemeRedesignPreview"
+
+type PreviewTab = "workbench" | "theme-redesign"
 
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
@@ -76,7 +79,47 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   )
 }
 
-export function PreviewApp() {
+function TabBar({
+  active,
+  onChange,
+  t,
+}: {
+  active: PreviewTab
+  onChange: (tab: PreviewTab) => void
+  t: (typeof tokens)[ThemeKind]
+}) {
+  const tabBtn = (id: PreviewTab, label: string) => {
+    const on = active === id
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(id)}
+        style={{
+          padding: "8px 16px",
+          borderRadius: "6px 6px 0 0",
+          border: on ? `1px solid ${t.border}` : "1px solid transparent",
+          borderBottom: on ? `1px solid ${t.card}` : `1px solid ${t.border}`,
+          background: on ? t.card : "transparent",
+          color: on ? t.foreground : t.mutedFg,
+          fontSize: 13,
+          fontWeight: on ? 600 : 500,
+          marginBottom: -1,
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    )
+  }
+  return (
+    <Row gap={4} style={{ borderBottom: `1px solid ${t.border}` }}>
+      {tabBtn("workbench", "工作台选型")}
+      {tabBtn("theme-redesign", "主题重设计")}
+    </Row>
+  )
+}
+
+function WorkbenchPreviewTab() {
   const [scheme, setScheme] = useState<SchemeKind>("A")
   const [previewTheme, setPreviewTheme] = useState<ThemeKind>("dark")
   const t = tokens[previewTheme]
@@ -106,6 +149,19 @@ export function PreviewApp() {
   return (
     <div style={{ padding: 20, maxWidth: 1320, margin: "0 auto", background: t.background, color: t.foreground, minHeight: "100vh" }}>
       <Stack gap={20}>
+        <Row gap={8}>
+          <button type="button" style={btn(page === "workbench")} onClick={() => setPage("workbench")}>
+            工作台选型
+          </button>
+          <button type="button" style={btn(page === "themes")} onClick={() => setPage("themes")}>
+            主题重设计
+          </button>
+        </Row>
+
+        {page === "themes" ? (
+          <ThemeRedesignPreview />
+        ) : (
+          <>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 650, letterSpacing: "-0.02em" }}>PrettyCOM 工作台高保真选型</h1>
           <p style={{ margin: "6px 0 0", fontSize: 14, color: t.mutedFg }}>
@@ -216,7 +272,34 @@ export function PreviewApp() {
             />
           </div>
         </Card>
+          </>
+        )}
       </Stack>
+    </div>
+  )
+}
+
+export function PreviewApp() {
+  const [tab, setTab] = useState<PreviewTab>("workbench")
+  const t = tokens.dark
+
+  if (tab === "theme-redesign") {
+    return (
+      <div>
+        <div style={{ padding: "12px 20px 0", maxWidth: 1400, margin: "0 auto", background: t.background }}>
+          <TabBar active={tab} onChange={setTab} t={t} />
+        </div>
+        <ThemeRedesignPreview />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ padding: "12px 20px 0", maxWidth: 1320, margin: "0 auto", background: tokens.dark.background }}>
+        <TabBar active={tab} onChange={setTab} t={tokens.dark} />
+      </div>
+      <WorkbenchPreviewTab />
     </div>
   )
 }

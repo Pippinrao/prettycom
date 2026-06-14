@@ -165,13 +165,43 @@ function finalizeMergedState(state: PrettyComState): PrettyComState {
   }
 }
 
+const BUILTIN_ALIAS_IDS = new Set(createDefaultAliases().map((alias) => alias.id))
+
+export function aliasesSignature(aliases: Alias[]): string {
+  return aliases.map((alias) => `${alias.id}\u0000${alias.name}\u0000${alias.command}`).join("\u0001")
+}
+
+/** Merge built-in quick commands into persisted state; respect full DSL replace (no built-in ids). */
 export function mergeDefaultAliases(saved: Alias[] | undefined): Alias[] {
   const defaults = createDefaultAliases()
   const savedList = saved ?? []
+
+  if (savedList.length > 0 && !savedList.some((alias) => BUILTIN_ALIAS_IDS.has(alias.id))) {
+    return savedList
+  }
+
+  if (savedList.length === 0) {
+    return defaults
+  }
+
   const savedById = new Map(savedList.map((alias) => [alias.id, alias]))
   const mergedDefaults = defaults.map((def) => savedById.get(def.id) ?? def)
-  const custom = savedList.filter((alias) => !defaults.some((def) => def.id === alias.id))
+  const custom = savedList.filter((alias) => !BUILTIN_ALIAS_IDS.has(alias.id))
   return [...mergedDefaults, ...custom]
+}
+
+export function resolvePersistedState(
+  persisted: Partial<PrettyComState> | undefined,
+  current: PrettyComState
+): PrettyComState {
+  const merged = mergePersistedPrettyComState(persisted, current)
+  const initialSig = aliasesSignature(createDefaultAliases())
+  const currentSig = aliasesSignature(current.aliases)
+  const persistedSig = aliasesSignature(persisted?.aliases ?? [])
+  if (currentSig !== initialSig && currentSig !== persistedSig) {
+    return { ...merged, aliases: current.aliases }
+  }
+  return merged
 }
 
 export function mergePersistedPrettyComState(
@@ -598,7 +628,7 @@ export const usePrettyComStore = create<PrettyComState>()(
         })),
       }),
       merge: (persisted, current) =>
-        mergePersistedPrettyComState(persisted as Partial<PrettyComState> | undefined, current),
+        resolvePersistedState(persisted as Partial<PrettyComState> | undefined, current),
       onRehydrateStorage: () => (state) => {
         if (state?.theme) {
           applyTheme(state.theme)

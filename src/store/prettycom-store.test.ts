@@ -7,6 +7,7 @@ import {
   DEV_TEST_SESSION_ID,
   mergeDefaultAliases,
   mergePersistedPrettyComState,
+  resolvePersistedState,
   migrateSendListCommands,
   normalizeRxDisplayMode,
   sanitizeProductionSessions,
@@ -352,9 +353,38 @@ describe("prettycom-store", () => {
 
   it("mergeDefaultAliases keeps user-defined aliases with custom ids", () => {
     const custom = { id: "custom-1", name: "Foo", command: "FOO", mode: "ascii" as const, suffix: "crlf" as const }
-    const merged = mergeDefaultAliases([custom])
+    const merged = mergeDefaultAliases([
+      { id: "reset", name: "Reset", command: "AT+RST", mode: "ascii", suffix: "crlf" },
+      custom,
+    ])
     expect(merged).toHaveLength(5)
     expect(merged.at(-1)).toEqual(custom)
+  })
+
+  it("mergeDefaultAliases keeps DSL-imported list without restoring built-ins", () => {
+    const imported = [
+      { id: "imported-1", name: "Custom", command: "AT+TEST", mode: "ascii" as const, suffix: "crlf" as const },
+    ]
+    expect(mergeDefaultAliases(imported)).toEqual(imported)
+  })
+
+  it("mergePersistedPrettyComState restores DSL-imported aliases after reload", () => {
+    const imported = [
+      { id: "imported-1", name: "Custom", command: "AT+TEST", mode: "ascii" as const, suffix: "crlf" as const },
+    ]
+    const restored = mergePersistedPrettyComState({ aliases: imported }, usePrettyComStore.getState())
+    expect(restored.aliases).toEqual(imported)
+    expect(restored.aliases.some((alias) => alias.id === "reset")).toBe(false)
+  })
+
+  it("resolvePersistedState keeps aliases changed before hydration completes", () => {
+    const imported = [
+      { id: "imported-1", name: "Custom", command: "AT+TEST", mode: "ascii" as const, suffix: "crlf" as const },
+    ]
+    const current = { ...usePrettyComStore.getState(), aliases: imported }
+    const persisted = { aliases: createDefaultAliases() }
+    const restored = resolvePersistedState(persisted, current)
+    expect(restored.aliases).toEqual(imported)
   })
 
   it("mergePersistedPrettyComState merges default aliases when saved aliases empty", () => {

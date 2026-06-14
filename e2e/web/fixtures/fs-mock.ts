@@ -13,3 +13,7 @@ if (typeof window !== "undefined") {
 export async function writeTextFile(path: string, contents: string) {
   writtenFiles.set(path, contents)
 }
+
+export async function readTextFile(path: string) {
+  return writtenFiles.get(path) ?? ""
+}

@@ -1,5 +1,5 @@
 import { useT } from "@/hooks/use-t"
-import { copyTextToClipboard, saveTextToFile } from "@/lib/text-export"
+import { copyTextToClipboard, loadTextFromFile, saveTextToFile } from "@/lib/text-export"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -42,6 +42,14 @@ export function DslImportExportDialog({
 }: DslImportExportDialogProps) {
   const t = useT()
 
+  const handleLoadFromFile = () => {
+    void loadTextFromFile().then((content) => {
+      if (content !== null) {
+        onTextChange(content)
+      }
+    })
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" data-testid={`${testIdPrefix}-dialog`}>
@@ -67,12 +75,13 @@ export function DslImportExportDialog({
           </p>
         ) : null}
         <DialogFooter className="gap-2 sm:justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t("Cancel")}
           </Button>
           {mode === "export" ? (
             <>
               <Button
+                type="button"
                 variant="secondary"
                 onClick={() => void copyTextToClipboard(text)}
                 data-testid={`${testIdPrefix}-copy`}
@@ -80,6 +89,7 @@ export function DslImportExportDialog({
                 {t("Copy DSL")}
               </Button>
               <Button
+                type="button"
                 onClick={() => void saveTextToFile(text, defaultFileName)}
                 data-testid={`${testIdPrefix}-save-file`}
               >
@@ -87,9 +97,19 @@ export function DslImportExportDialog({
               </Button>
             </>
           ) : (
-            <Button onClick={onImport} data-testid={`${testIdPrefix}-confirm-import`}>
-              {t("Import")}
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleLoadFromFile}
+                data-testid={`${testIdPrefix}-load-file`}
+              >
+                {t("Load from file")}
+              </Button>
+              <Button type="button" onClick={onImport} data-testid={`${testIdPrefix}-confirm-import`}>
+                {t("Import")}
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

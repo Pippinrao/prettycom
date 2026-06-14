@@ -151,6 +151,35 @@ test("quick commands DSL import shows error when empty", async ({ page }) => {
   await expect(page.getByTestId("alias-item-reset")).toBeVisible()
 })
 
+/** @fc F31 */
+test("quick commands DSL import survives page reload", async ({ page }) => {
+  await page.getByTestId("alias-dsl-import").click()
+  const importDialog = page.getByTestId("alias-dsl-dialog")
+  const importDsl = [
+    "---",
+    "@label:PersistedCmd HELLO_PERSIST @loop:1 @interval:500",
+  ].join("\n")
+  await importDialog.locator("textarea").fill(importDsl)
+  await importDialog.getByTestId("alias-dsl-confirm-import").click()
+  await expect(importDialog).toBeHidden()
+  await expect(page.locator('[data-testid^="alias-item-"]').filter({ hasText: "HELLO_PERSIST" })).toBeVisible()
+  await expect(page.getByTestId("alias-item-reset")).toHaveCount(0)
+
+  await page.waitForFunction(() => {
+    const raw = localStorage.getItem("prettycom-ui-state")
+    return raw?.includes("HELLO_PERSIST") ?? false
+  })
+  const persisted = await page.evaluate(() => localStorage.getItem("prettycom-ui-state"))
+  await page.addInitScript((value: string | null) => {
+    if (value) {
+      localStorage.setItem("prettycom-ui-state", value)
+    }
+  }, persisted)
+  await page.reload()
+  await expect(page.locator('[data-testid^="alias-item-"]').filter({ hasText: "HELLO_PERSIST" })).toBeVisible()
+  await expect(page.getByTestId("alias-item-reset")).toHaveCount(0)
+})
+
 /** @fc F14 */
 test("add quick command button stays icon-sized in English UI", async ({ page }) => {
   await page.getByTestId("settings-open").click()

@@ -172,6 +172,7 @@ const zhCN: Record<string, string> = {
   "Copy the DSL below or save to a file.": "复制下方 DSL 或保存为文件。",
   "Copy DSL": "复制 DSL",
   "Save to file": "保存到文件",
+  "Load from file": "从文件加载",
   "Toggle recent commands": "展开/折叠最近命令",
   "Add quick command": "添加快捷命令",
   "No valid commands found in DSL.": "DSL 中未找到有效命令。",

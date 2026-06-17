@@ -1,13 +1,14 @@
 {
   "name": "prettycom",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:design": "vite --config vite.design.config.ts",
     "dev:e2e": "cross-env E2E_MOCK=1 vite --port 5199 --host 127.0.0.1",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node --experimental-strip-types scripts/check-production-build.ts",
+    "build:release": "npm run build && npm run tauri build",
     "tauri": "tauri",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -22,7 +23,8 @@
     "test:e2e": "playwright test",
     "test:e2e:desktop": "node e2e/desktop/run.mjs",
     "test:all": "npm run test:coverage && npm run test:rust && npm run test:e2e",
-    "test:fc": "node scripts/check-feature-coverage.mjs"
+    "test:fc": "node scripts/check-feature-coverage.mjs",
+    "test:production-gate": "npm run build"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",

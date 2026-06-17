@@ -31,6 +31,25 @@ jobs:
       - run: npm run test:e2e
       - run: npm run test:fc
 
+  production-gate:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:production-gate
+      - name: Reject E2E_MOCK production builds
+        run: |
+          if E2E_MOCK=1 npm run build; then
+            echo "::error::Production build must fail when E2E_MOCK=1"
+            exit 1
+          fi
+        shell: bash
+
   e2e-desktop:
     needs: unit
     runs-on: windows-latest

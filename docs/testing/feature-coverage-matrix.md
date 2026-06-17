@@ -37,6 +37,7 @@
 | F33 | 列表发送 DSL 导入导出 | defaults.test, text-export.test | Y | - | send-list-dsl-export/import，导出可复制与存文件 |
 | F23 | 进程退出释放串口 | lib.rs unit | 手工 | - | 关闭窗口后外部进程可重新打开端口；**禁止**自动化依赖 COM5/STM32 |
 | F24 | 非 Tauri Web 预览保护 | serial.test | 手工/截图 | - | 无 Tauri runtime 时不注册 event bridge，避免白屏 |
+| F34 | 生产构建门禁 | production-gate.test | - | - | `npm run build` 扫描 dist，禁止 E2E mock / 测试会话；`E2E_MOCK=1` 时 vite build 必须失败 |
 | - | Frame/Parse 解析 | N/A | N/A | N/A | 占位 UI，不测 |
 
 Web E2E 用例在 `e2e/web/*.spec.ts` 中以 `/** @fc Fxx */` 标注。CI 通过 `npm run test:fc` 校验矩阵 ID 均有 Web 覆盖（Desktop 项除外）。

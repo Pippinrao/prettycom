@@ -80,6 +80,7 @@ PrettyCOM 的目标是打造一个好看、好用、稳定、功能完整的桌�
 - 改动 `src/themes/` 或主题相关 UI → 读 `.cursor/skills/prettycom-themes/SKILL.md`；补/改 `registry.test.ts`、`useThemeFx.test.ts`；更新 [主题开发指南](docs/dev/themes.md)；生成后 **必须** `npm run build`（防范 UTF-16 编码踩坑）
 - 改动真实串口收发 → 跑 `npm run test:rust`
 - 声称完成前必须运行相关命令并报告实际输出
+- 发布安装包前必须 `npm run test:production-gate`（或 `npm run build`）；**禁止**在 `E2E_MOCK=1` 环境下执行 `vite build` / `tauri build`
 
 ## 主题与装饰（速查）
 
@@ -108,6 +109,13 @@ npm run build
 npm test
 ```
 
+发布安装包前 additionally：
+
+```bash
+npm run test:production-gate
+npm run build:release
+```
+
 涉及 Tauri/Rust 时 additionally：
 
 ```bash
@@ -119,6 +127,7 @@ UI 流程变更时：
 ```bash
 npm run test:e2e
 npm run test:fc
+npm run test:production-gate
 ```
 
 ## 常用命令
